@@ -1,0 +1,52 @@
+# .gitignore for Cross-Tenant VNet Peering
+
+# Sensitive information - DO NOT COMMIT
+*.private
+*.secret
+*-private.sh
+*-secrets.sh
+config-private.sh
+.env
+.env.local
+
+# Azure CLI outputs
+azure-output.json
+vnet-info.json
+
+# Backup files
+*.bak
+*.backup
+*~
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# IDE files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Logs
+*.log
+logs/
+*.out
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Custom configuration files with real values
+config.sh
+my-config.sh
+local-config.sh

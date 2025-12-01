@@ -1,0 +1,35 @@
+{
+  "properties": {
+    "roleName": "vnet-peer",
+    "description": "Allow VNet peering, sync and UDR changes on the scoped VNets.",
+    "assignableScopes": [
+      "/subscriptions/{SUBSCRIPTION_ID}/resourceGroups/{RESOURCE_GROUP_NAME}"
+    ],
+    "permissions": [
+      {
+        "actions": [
+          "Microsoft.Network/virtualNetworks/read",
+          "Microsoft.Network/virtualNetworks/write",
+          "Microsoft.Network/virtualNetworks/subnets/read",
+          "Microsoft.Network/virtualNetworks/subnets/write",
+          "Microsoft.Network/virtualNetworks/virtualNetworkPeerings/read",
+          "Microsoft.Network/virtualNetworks/virtualNetworkPeerings/write",
+          "Microsoft.Network/virtualNetworks/virtualNetworkPeerings/delete",
+          "Microsoft.Network/virtualNetworks/peer/action",
+          "Microsoft.Network/routeTables/read",
+          "Microsoft.Network/routeTables/write",
+          "Microsoft.Network/routeTables/delete",
+          "Microsoft.Network/routeTables/routes/read",
+          "Microsoft.Network/routeTables/routes/write",
+          "Microsoft.Network/routeTables/routes/delete",
+          "Microsoft.Network/routeTables/join/action",
+          "Microsoft.Network/networkSecurityGroups/read",
+          "Microsoft.Network/networkSecurityGroups/join/action"
+        ],
+        "notActions": [],
+        "dataActions": [],
+        "notDataActions": []
+      }
+    ]
+  }
+}

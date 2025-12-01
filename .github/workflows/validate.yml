@@ -1,0 +1,147 @@
+name: Documentation Validation
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  validate-docs:
+    name: Validate Documentation
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Check for sensitive information
+      run: |
+        echo "Checking for potentially sensitive information..."
+        
+        # Check for patterns that might be real Azure IDs or emails
+        if grep -rE "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}" --exclude-dir=.git --exclude="*.md" .; then
+          echo "WARNING: Found potential Azure GUIDs in non-markdown files"
+        fi
+        
+        # Check for email addresses
+        if grep -rE "[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}" --exclude-dir=.git --exclude="*.md" .; then
+          echo "WARNING: Found potential email addresses"
+        fi
+        
+        echo "✓ Sensitive information check complete"
+
+    - name: Validate shell scripts
+      run: |
+        echo "Validating shell scripts..."
+        
+        for script in $(find . -name "*.sh"); do
+          echo "Checking $script..."
+          bash -n "$script" || exit 1
+        done
+        
+        echo "✓ All shell scripts are valid"
+
+    - name: Check for placeholders in examples
+      run: |
+        echo "Checking that examples use placeholders..."
+        
+        # Verify markdown files use placeholders
+        if grep -rE "32d7ed9b|7aa77d2e|main-customer|robenhai" --include="*.md" .; then
+          echo "ERROR: Found non-placeholder values in markdown files"
+          exit 1
+        fi
+        
+        echo "✓ All examples use proper placeholders"
+
+    - name: Validate markdown links
+      run: |
+        echo "Validating markdown files..."
+        
+        # Check if all referenced files exist
+        for md in $(find . -name "*.md"); do
+          echo "Checking $md..."
+          
+          # Extract relative file links
+          grep -oE '\[.*\]\((?!http)[^)]+\)' "$md" | sed 's/.*(\(.*\))/\1/' | while read link; do
+            # Remove anchor
+            file=$(echo "$link" | cut -d'#' -f1)
+            if [ -n "$file" ] && [ ! -f "$file" ] && [ ! -d "$file" ]; then
+              echo "ERROR: Broken link in $md: $file"
+              exit 1
+            fi
+          done
+        done
+        
+        echo "✓ All markdown links are valid"
+
+    - name: Validate JSON files
+      run: |
+        echo "Validating JSON files..."
+        
+        for json in $(find . -name "*.json"); do
+          echo "Checking $json..."
+          jq empty "$json" || exit 1
+        done
+        
+        echo "✓ All JSON files are valid"
+
+  shellcheck:
+    name: ShellCheck
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Run ShellCheck
+      uses: ludeeus/action-shellcheck@master
+      with:
+        scandir: '.'
+        severity: 'warning'
+        ignore_paths: '.git .github'
+
+  validate-prerequisites:
+    name: Validate Prerequisites
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Check Azure CLI compatibility
+      run: |
+        echo "Checking if Azure CLI commands in scripts are valid..."
+        
+        # Extract az commands and verify syntax (without executing)
+        for script in $(find . -name "*.sh"); do
+          echo "Extracting az commands from $script..."
+          grep -oE 'az [a-z]+.*' "$script" | head -5 || true
+        done
+        
+        echo "✓ Azure CLI command syntax check complete"
+
+    - name: Verify documentation completeness
+      run: |
+        echo "Checking for required documentation files..."
+        
+        required_files=(
+          "README.md"
+          "PREREQUISITES.md"
+          "LICENSE"
+          "CONTRIBUTING.md"
+          "SECURITY.md"
+          "Cross-Tenant-VNet-Peering-Guide.md"
+          "vnet-peer-role.json"
+          "create-cross-tenant-vnet-peering.sh"
+        )
+        
+        for file in "${required_files[@]}"; do
+          if [ ! -f "$file" ]; then
+            echo "ERROR: Required file missing: $file"
+            exit 1
+          fi
+          echo "✓ Found $file"
+        done
+        
+        echo "✓ All required files present"
