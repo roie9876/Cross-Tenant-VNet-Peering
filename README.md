@@ -15,8 +15,26 @@ Cross-tenant VNet peering allows Virtual Networks in different Azure AD tenants 
 
 ## 🚀 Quick Start
 
+### For Customers: One-Click Deployment
+
+If your ISV/partner sent you here, click the button below to deploy the VNet peering **in your Azure environment**:
+
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Froie9876%2FCross-Tenant-VNet-Peering%2Fmain%2Ftemplates%2Fdeploy-vnet-peering.json)
+
+**How it works:**
+1. Click button → Opens Azure Portal authenticated as **you** (the customer)
+2. Fill in **your VNet name** and **resource group**
+3. Paste the **ISV's VNet resource ID** (they provide this)
+4. Click Deploy → Creates peering **in your tenant only**
+
+**You'll need:** `vnet-peer` custom role assigned (see [Prerequisites](docs/PREREQUISITES.md))
+
+---
+
+### For ISVs/Implementers: Full Setup
+
 ### 1. Review Prerequisites
-Before running the script, read **[docs/PREREQUISITES.md](docs/PREREQUISITES.md)** to understand:
+Before implementation, read **[docs/PREREQUISITES.md](docs/PREREQUISITES.md)** to understand:
 - Required tools and installations
 - Azure environment requirements
 - Custom RBAC role setup
@@ -149,7 +167,9 @@ Cross-Tenant-VNet-Peering/
 ## 📖 Documentation
 
 ### Quick Reference
-- **Prerequisites:** [docs/PREREQUISITES.md](docs/PREREQUISITES.md)
+- **🚀 Deploy Button Guide:** [DEPLOY-BUTTON-REFERENCE.md](DEPLOY-BUTTON-REFERENCE.md) - Quick reference for sharing with customers
+- **👥 ISV Customer Guide:** [docs/ISV-CUSTOMER-GUIDE.md](docs/ISV-CUSTOMER-GUIDE.md) - Complete ISV workflow and email templates
+- **📋 Prerequisites:** [docs/PREREQUISITES.md](docs/PREREQUISITES.md)
 - **Deployment Guide:** [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
 - **Full Guide:** [docs/Cross-Tenant-VNet-Peering-Guide.md](docs/Cross-Tenant-VNet-Peering-Guide.md)
 - **Examples:** [docs/EXAMPLES.md](docs/EXAMPLES.md)

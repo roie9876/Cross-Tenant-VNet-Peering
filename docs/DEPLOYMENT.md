@@ -14,13 +14,23 @@ This guide shows how to deploy cross-tenant VNet peering using ARM/Bicep templat
 
 ## 🚀 Quick Start
 
-### Option 1: Deploy to Azure Button (Easiest)
+### Option 1: Deploy to Azure Button (Easiest for ISV/Customer Scenarios)
 
-**For ISV scenarios**, create a "Deploy to Azure" button:
+**Click the button below to deploy in YOUR environment:**
 
-[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FYOUR-REPO%2Fcross-tenant-vnet-peering%2Fmain%2Fdeploy-vnet-peering.json)
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Froie9876%2FCross-Tenant-VNet-Peering%2Fmain%2Ftemplates%2Fdeploy-vnet-peering.json)
 
-Customers just click the button and fill in parameters!
+**How it works:**
+1. **Customer clicks the button** → Opens Azure Portal **in their tenant/subscription**
+2. **Customer authenticates** → Logs into **their own Azure account**
+3. **Customer fills parameters** → Specifies their VNet and your ISV VNet resource ID
+4. **Customer deploys** → Creates peering **in their environment only**
+
+**Important:** 
+- ✅ Customer deploys in **their tenant** - not yours
+- ✅ Customer needs the **full resource ID** of your ISV VNet (you provide this)
+- ✅ No personal email addresses involved
+- ✅ You must deploy the other side of the peering separately in your ISV tenant
 
 ### Option 2: Azure CLI Deployment
 
@@ -106,6 +116,55 @@ Edit `deploy-vnet-peering.parameters.json`:
 | `allowForwardedTraffic` | No | Allow NVA forwarded traffic | `false` (default) |
 | `allowGatewayTransit` | No | This VNet has a gateway | `false` (default) |
 | `useRemoteGateways` | No | Use remote VNet's gateway | `false` (default) |
+
+## 🏢 ISV Deployment Workflow
+
+### Typical ISV → Customer Flow
+
+**Step 1: ISV (You) provides information to customer**
+```
+Subject: VNet Peering Setup for [Your Product]
+
+To connect to our service, please deploy this peering in your Azure environment:
+
+1. Click: [Deploy to Azure Button]
+2. Fill in these parameters:
+   - Your VNet name: [customer fills this]
+   - Your Resource Group: [customer fills this]
+   - Our VNet Resource ID: /subscriptions/YOUR-SUB-ID/resourceGroups/YOUR-RG/providers/Microsoft.Network/virtualNetworks/YOUR-VNET
+   - Peering Name: peer-to-isv-product (or customer chooses)
+
+3. Click "Review + Create"
+
+Once deployed, notify us and we'll complete our side of the connection.
+```
+
+**Step 2: Customer clicks button**
+- Opens Azure Portal authenticated as **the customer**
+- In **customer's tenant/subscription**
+- Pre-filled template, customer just adds their details
+
+**Step 3: Customer deploys**
+- Creates peering in **customer's VNet** pointing to **your ISV VNet**
+- Peering state: "Initiated" (waiting for your side)
+
+**Step 4: ISV (You) completes your side**
+```bash
+az login --tenant YOUR-ISV-TENANT-ID
+az account set --subscription YOUR-ISV-SUBSCRIPTION-ID
+
+az deployment group create \
+  --resource-group YOUR-ISV-RG \
+  --template-file templates/deploy-vnet-peering.bicep \
+  --parameters localVnetName=YOUR-VNET-NAME \
+               remoteVnetResourceId="/subscriptions/CUSTOMER-SUB/resourceGroups/CUSTOMER-RG/providers/Microsoft.Network/virtualNetworks/CUSTOMER-VNET" \
+               peeringName=peer-to-customer-xyz
+```
+
+**Step 5: Both sides show "Connected"**
+- Customer peering: Connected ✅
+- ISV peering: Connected ✅
+- Traffic can flow!
 
 ## ✅ Validation Features
 
