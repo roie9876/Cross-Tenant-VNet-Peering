@@ -61,12 +61,22 @@ That's it! Let us know when done.
 
 ## 📝 Customer Checklist
 
-Before clicking:
-- [ ] Custom RBAC role `vnet-peer` assigned
+### One-Time Setup (Admin Does This)
+- [ ] Azure Admin creates `vnet-peer` custom role
+- [ ] Azure Admin assigns role to deployer user(s)
+
+### Before Each Deployment (User Does This)
+- [ ] Verify `vnet-peer` role is assigned to you
 - [ ] Know your VNet name
 - [ ] Know your Resource Group
 - [ ] Have ISV's VNet Resource ID
 - [ ] Verified no address space overlap
+
+### Why Two Checklists?
+**Admin setup is ONCE** - Creates role and assigns to users
+**User deployment is MANY TIMES** - Deploys peering as needed
+
+This separation allows **regular users to deploy without admin privileges**!
 
 ## 🎯 Next Steps
 

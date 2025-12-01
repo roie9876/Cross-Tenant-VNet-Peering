@@ -117,9 +117,54 @@ Edit `deploy-vnet-peering.parameters.json`:
 | `allowGatewayTransit` | No | This VNet has a gateway | `false` (default) |
 | `useRemoteGateways` | No | Use remote VNet's gateway | `false` (default) |
 
+## ❓ Common Questions
+
+### Q: Why do customers need a custom RBAC role?
+**A:** The custom `vnet-peer` role provides **least-privilege access**. Without it, customers would need:
+- ❌ Owner role (full control of resource group)
+- ❌ Contributor role (can create/delete all resources)
+- ✅ With custom role: Only peering permissions (secure!)
+
+### Q: Can the Bicep template create the role automatically?
+**A:** No, because:
+- Role creation requires **subscription-level permissions**
+- Peering deployment is **resource group-level**
+- Separating concerns: Admin creates role once, users deploy peering many times
+- Security: Role creation should be controlled by admins
+
+### Q: Do customers need admin privileges to deploy?
+**A:** No! That's the point:
+- ❌ Customer does NOT need Owner/Contributor
+- ✅ Customer only needs `vnet-peer` custom role (minimal permissions)
+- ✅ Regular users can deploy once role is assigned
+
+### Q: Does clicking the button deploy both sides?
+**A:** No, cross-tenant peering requires **two separate deployments**:
+1. **Customer deploys their side** (using Deploy to Azure button)
+2. **ISV deploys their side** (using template, script, or Portal)
+3. Both must exist for peering to be "Connected"
+
+This is an **Azure platform requirement**, not a limitation of this solution.
+
+---
+
 ## 🏢 ISV Deployment Workflow
 
 ### Typical ISV → Customer Flow
+
+**Step 0: One-Time Setup (Customer's Azure Admin)**
+```bash
+# Admin creates custom role (ONCE per subscription)
+az role definition create --role-definition vnet-peer-role.json
+
+# Admin assigns role to user(s) who will deploy peering
+az role assignment create \
+  --assignee deployer@customer.com \
+  --role "vnet-peer" \
+  --scope "/subscriptions/{SUB}/resourceGroups/{RG}"
+
+# Now regular users can deploy without admin privileges!
+```
 
 **Step 1: ISV (You) provides information to customer**
 ```

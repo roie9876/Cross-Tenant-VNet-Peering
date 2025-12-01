@@ -126,6 +126,31 @@ Share the `templates/vnet-peer-role.json` file or link to prerequisites document
 
 ## ❓ Common Customer Questions
 
+### Q: "Do I need admin privileges to deploy this?"
+**A:** No! You only need the `vnet-peer` custom role. Here's how it works:
+
+**One-Time Setup (Azure Admin does this):**
+```bash
+# Your Azure Admin creates the custom role (once)
+az role definition create --role-definition vnet-peer-role.json
+
+# Admin assigns it to you
+az role assignment create \
+  --assignee YOUR-EMAIL \
+  --role "vnet-peer" \
+  --scope "/subscriptions/{YOUR-SUB}/resourceGroups/{YOUR-RG}"
+```
+
+**Regular Deployment (You do this):**
+- Click Deploy to Azure button
+- Fill in parameters
+- Deploy (you have `vnet-peer` role, not admin!)
+
+**Why this matters:**
+- ✅ You don't need Owner or Contributor (security!)
+- ✅ Follows least-privilege principle
+- ✅ Your admin only sets this up once
+
 ### Q: "Will this give you access to our Azure environment?"
 **A:** No. VNet peering only allows **network-level connectivity** between specific VNets. It does NOT grant:
 - Access to your Azure portal

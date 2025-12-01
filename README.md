@@ -66,7 +66,12 @@ This repository provides **two deployment methods** for creating VNet peering be
 **What happens:**
 1. Opens Azure Portal (you authenticate with your account)
 2. Fill parameters: your VNet, resource group, remote VNet resource ID
-3. Click Deploy → Peering created in your tenant
+3. Click Deploy → Peering created **in your tenant only**
+
+⚠️ **Important:** 
+- **Prerequisites:** You need `vnet-peer` custom role assigned (one-time setup by your admin)
+- **Two-sided deployment:** This creates YOUR side only. ISV must deploy their side separately.
+- **No admin needed:** You don't need Owner/Contributor, just the custom role!
 
 **For ISVs:** Share this button with customers. See [docs/ISV-CUSTOMER-GUIDE.md](docs/ISV-CUSTOMER-GUIDE.md) for email templates and workflow.
 
