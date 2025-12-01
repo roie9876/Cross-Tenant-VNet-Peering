@@ -1,48 +1,93 @@
 # Cross-Tenant VNet Peering Automation
 
-This repository contains an automated Azure CLI script for creating VNet peering between two Azure tenants using custom RBAC roles with least-privilege access.
+This repository provides **two deployment methods** for creating VNet peering between Azure tenants using custom RBAC roles with least-privilege access.
 
-## 📋 Overview
+## 🎯 Choose Your Deployment Method
 
-Cross-tenant VNet peering allows Virtual Networks in different Azure AD tenants to communicate with each other. This automation:
+| Method | Best For | Complexity | Customer-Friendly |
+|--------|----------|------------|-------------------|
+| **🔘 ARM/Bicep Templates** | ISVs, Enterprise, GUI users | ⭐ Easy | ✅ Yes - One-click button |
+| **⚙️ Bash Script** | DevOps, Automation, CI/CD | ⭐⭐ Medium | ❌ Requires CLI knowledge |
 
-- ✅ Creates bidirectional VNet peering between two Azure tenants
-- ✅ Uses custom RBAC roles with minimal required permissions
-- ✅ Validates address space overlap
-- ✅ Provides colored output and progress indicators
-- ✅ Automatically verifies peering status
-- ✅ Supports advanced peering options (gateway transit, forwarded traffic)
+### 🔘 Option 1: ARM/Bicep Templates (Recommended for ISVs)
 
-## 🚀 Quick Start
+**Perfect for:**
+- ISVs connecting customers to their service
+- Customers who prefer Azure Portal (no CLI)
+- Enterprise deployments requiring approval workflows
+- Documented, auditable deployments
 
-### For Customers: One-Click Deployment
+**Advantages:**
+- ✅ One-click "Deploy to Azure" button
+- ✅ GUI-based deployment in Azure Portal
+- ✅ Built-in validation before deployment
+- ✅ What-if preview (see changes before applying)
+- ✅ Professional customer experience
+- ✅ Deployment history and audit trail
 
-If your ISV/partner sent you here, click the button below to deploy the VNet peering **in your Azure environment**:
+**See:** [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for full guide
 
-[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Froie9876%2FCross-Tenant-VNet-Peering%2Fmain%2Ftemplates%2Fdeploy-vnet-peering.json)
+### ⚙️ Option 2: Bash Script (For DevOps/Automation)
 
-**How it works:**
-1. Click button → Opens Azure Portal authenticated as **you** (the customer)
-2. Fill in **your VNet name** and **resource group**
-3. Paste the **ISV's VNet resource ID** (they provide this)
-4. Click Deploy → Creates peering **in your tenant only**
+**Perfect for:**
+- DevOps teams automating deployments
+- CI/CD pipelines
+- Internal IT operations
+- Users comfortable with Azure CLI
 
-**You'll need:** `vnet-peer` custom role assigned (see [Prerequisites](docs/PREREQUISITES.md))
+**Advantages:**
+- ✅ Fully automated - no manual steps
+- ✅ Pre-flight validation checks
+- ✅ Colored output and progress indicators
+- ✅ Address space overlap detection
+- ✅ Automatic status verification
+- ✅ Easy to integrate in automation workflows
+
+**See:** [scripts/README.md](scripts/README.md) for full guide
 
 ---
 
-### For ISVs/Implementers: Full Setup
+## 📋 Common Features (Both Methods)
 
-### 1. Review Prerequisites
-Before implementation, read **[docs/PREREQUISITES.md](docs/PREREQUISITES.md)** to understand:
+- ✅ **Least Privilege Access:** Custom RBAC role with minimal permissions
+- ✅ **Bidirectional Peering:** Creates both sides automatically
+- ✅ **Address Space Validation:** Prevents overlapping IP ranges
+- ✅ **Cross-Tenant Support:** Works across different Azure AD tenants
+- ✅ **Advanced Options:** Gateway transit, forwarded traffic, etc.
+
+## 🚀 Quick Start
+
+### Method 1: Deploy to Azure Button (Bicep/ARM Template)
+
+**For Customers:** Click the button to deploy in your Azure Portal
+
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Froie9876%2FCross-Tenant-VNet-Peering%2Fmain%2Ftemplates%2Fdeploy-vnet-peering.json)
+
+**What happens:**
+1. Opens Azure Portal (you authenticate with your account)
+2. Fill parameters: your VNet, resource group, remote VNet resource ID
+3. Click Deploy → Peering created in your tenant
+
+**For ISVs:** Share this button with customers. See [docs/ISV-CUSTOMER-GUIDE.md](docs/ISV-CUSTOMER-GUIDE.md) for email templates and workflow.
+
+**Full Guide:** [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
+
+---
+
+### Method 2: Bash Script (Automated CLI)
+
+**For DevOps/Automation Teams**
+
+#### 1. Review Prerequisites
+Read **[docs/PREREQUISITES.md](docs/PREREQUISITES.md)** to understand:
 - Required tools and installations
 - Azure environment requirements
 - Custom RBAC role setup
 - User account or Service Principal configuration
 
-### 2. Set Up Custom RBAC Roles
+#### 2. Set Up Custom RBAC Roles
 
-Create the `vnet-peer` custom role in **both** tenants:
+Create the `vnet-peer` custom role in **both** tenants (required for both methods):
 
 ```bash
 # Tenant A
@@ -70,7 +115,7 @@ az role assignment create \
   --scope "/subscriptions/<SUBSCRIPTION_B_ID>/resourceGroups/<RESOURCE_GROUP_B>"
 ```
 
-### 3. Configure the Script
+#### 3. Configure the Bash Script
 
 Edit `scripts/create-cross-tenant-vnet-peering.sh` and update the configuration section:
 
@@ -98,7 +143,7 @@ ALLOW_GATEWAY_TRANSIT_B="false"
 USE_REMOTE_GATEWAYS_B="false"
 ```
 
-### 4. Run the Script
+#### 4. Run the Bash Script
 
 ```bash
 # Make the script executable
@@ -116,63 +161,122 @@ The script will:
 5. Create peering connections in both directions
 6. Verify the final peering status
 
+**Full Guide:** [scripts/README.md](scripts/README.md)
+
+---
+
+## 🤔 Which Method Should I Use?
+
+**📊 See detailed comparison:** [DEPLOYMENT-METHODS-COMPARISON.md](DEPLOYMENT-METHODS-COMPARISON.md)
+
+### Use ARM/Bicep Templates (Method 1) if:
+- ✅ You're an ISV connecting customers to your service
+- ✅ Your customers prefer GUI over CLI
+- ✅ You want professional "Deploy to Azure" button experience
+- ✅ You need deployment approval workflows
+- ✅ You want built-in what-if validation
+- ✅ Customers will deploy their side independently
+
+### Use Bash Script (Method 2) if:
+- ✅ You're a DevOps engineer automating deployments
+- ✅ You control both Azure tenants
+- ✅ You want to integrate into CI/CD pipelines
+- ✅ You prefer command-line automation
+- ✅ You want a single script to deploy both sides
+- ✅ You're comfortable with Azure CLI
+
+### Can I use both?
+**Yes!** Many ISVs use:
+- **Templates for customers** (easy button-click deployment)
+- **Bash script for their own side** (automated ISV environment setup)
+
+This is actually the recommended hybrid approach.
+
 ## 📁 Repository Structure
 
 ```
 Cross-Tenant-VNet-Peering/
-├── docs/                           # Documentation
-│   ├── Cross-Tenant-VNet-Peering-Guide.md    # Complete implementation guide
+├── docs/                           # 📚 Documentation
+│   ├── README.md                   # Documentation guide and navigation
+│   ├── Cross-Tenant-VNet-Peering-Guide.md    # Complete manual implementation guide
 │   ├── PREREQUISITES.md            # Setup requirements and preparation
-│   ├── DEPLOYMENT.md               # ARM/Bicep deployment guide
+│   ├── DEPLOYMENT.md               # 🔘 ARM/Bicep template deployment guide
+│   ├── ISV-CUSTOMER-GUIDE.md       # ISV workflow and customer email templates
 │   └── EXAMPLES.md                 # Usage scenarios and examples
-├── templates/                      # ARM/Bicep templates
-│   ├── deploy-vnet-peering.bicep   # Bicep template
-│   ├── deploy-vnet-peering.json    # Compiled ARM template
-│   ├── deploy-vnet-peering.parameters.json   # Parameters file
+├── templates/                      # 🔘 ARM/Bicep templates (Method 1)
+│   ├── README.md                   # Templates documentation
+│   ├── deploy-vnet-peering.bicep   # Bicep template source
+│   ├── deploy-vnet-peering.json    # Compiled ARM template (for Deploy to Azure button)
+│   ├── deploy-vnet-peering.parameters.json   # Parameters file example
 │   ├── createUiDefinition.json     # Azure Portal UI definition
 │   └── vnet-peer-role.json         # Custom RBAC role definition
-├── scripts/                        # Automation scripts
+├── scripts/                        # ⚙️ Automation scripts (Method 2)
+│   ├── README.md                   # Scripts documentation
 │   ├── create-cross-tenant-vnet-peering.sh   # Main bash script
 │   └── config-template.sh          # Configuration template
 ├── .github/                        # GitHub configuration
 │   ├── workflows/                  # CI/CD workflows
 │   ├── ISSUE_TEMPLATE/            # Issue templates
 │   └── PULL_REQUEST_TEMPLATE.md   # PR template
-├── README.md                       # This file - quick start guide
+├── DEPLOY-BUTTON-REFERENCE.md      # 🚀 Quick reference for Deploy to Azure button
+├── README.md                       # This file - main entry point
 ├── LICENSE                         # MIT License
 ├── CONTRIBUTING.md                 # Contribution guidelines
 ├── SECURITY.md                     # Security policy
+├── CHANGELOG.md                    # Version history
+└── .gitignore                      # Excluded files
 └── CHANGELOG.md                    # Version history
 
 ## 🔑 Key Features
 
-### Security Best Practices
+### Security Best Practices (Both Methods)
 - **Least Privilege Access:** Uses custom RBAC role with only required permissions
 - **Resource Group Scoped:** Roles limited to specific resource groups, not entire subscriptions
 - **No Owner/Contributor Required:** Eliminates need for excessive permissions
+- **Audit Trail:** All deployments logged in Azure Activity Log
 
-### Automation Features
-- **Pre-flight Checks:** Validates Azure CLI installation, configuration, and prerequisites
-- **Address Space Validation:** Prevents peering with overlapping IP ranges
-- **Interactive Confirmation:** Shows summary before making changes
-- **Status Verification:** Automatically checks peering state after creation
-- **Colored Output:** Easy-to-read progress indicators and status messages
+### Method 1: ARM/Bicep Templates Features
+- **One-Click Deployment:** Deploy to Azure button for customers
+- **GUI-Based:** No CLI installation required
+- **Built-in Validation:** Azure validates before deploying
+- **What-If Preview:** See changes before applying
+- **Portal UI Definition:** Custom form with help text and validation
+- **Deployment History:** Full audit trail in Azure Portal
 
-### Advanced Options
+### Method 2: Bash Script Features
+- **Full Automation:** Single command deploys both sides
+- **Pre-flight Checks:** Validates Azure CLI, config, prerequisites
+- **Address Space Validation:** Prevents overlapping IP ranges
+- **Interactive Confirmation:** Shows summary before changes
+- **Status Verification:** Automatically checks peering state
+- **Colored Output:** Easy-to-read progress indicators
+- **CI/CD Ready:** Easy to integrate into pipelines
+
+### Advanced Options (Both Methods)
 - Gateway transit for VPN connectivity
 - Forwarded traffic for Network Virtual Appliances (NVA)
 - Configurable peering names
-- Support for complex networking scenarios
+- Support for hub-and-spoke, multi-region scenarios
 
 ## 📖 Documentation
 
-### Quick Reference
-- **🚀 Deploy Button Guide:** [DEPLOY-BUTTON-REFERENCE.md](DEPLOY-BUTTON-REFERENCE.md) - Quick reference for sharing with customers
-- **👥 ISV Customer Guide:** [docs/ISV-CUSTOMER-GUIDE.md](docs/ISV-CUSTOMER-GUIDE.md) - Complete ISV workflow and email templates
-- **📋 Prerequisites:** [docs/PREREQUISITES.md](docs/PREREQUISITES.md)
-- **Deployment Guide:** [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
-- **Full Guide:** [docs/Cross-Tenant-VNet-Peering-Guide.md](docs/Cross-Tenant-VNet-Peering-Guide.md)
-- **Examples:** [docs/EXAMPLES.md](docs/EXAMPLES.md)
+### Deployment Methods Documentation
+
+| Document | For Method | Description |
+|----------|-----------|-------------|
+| [📋 PREREQUISITES.md](docs/PREREQUISITES.md) | **Both** | Setup requirements, RBAC roles, preparation steps |
+| [🔘 DEPLOYMENT.md](docs/DEPLOYMENT.md) | **Method 1** | ARM/Bicep template deployment guide |
+| [⚙️ scripts/README.md](scripts/README.md) | **Method 2** | Bash script usage and automation guide |
+| [🚀 DEPLOY-BUTTON-REFERENCE.md](DEPLOY-BUTTON-REFERENCE.md) | **Method 1** | Quick reference for Deploy to Azure button |
+| [👥 ISV-CUSTOMER-GUIDE.md](docs/ISV-CUSTOMER-GUIDE.md) | **Method 1** | ISV workflow and customer email templates |
+
+### Additional Documentation
+
+| Document | Description |
+|----------|-------------|
+| [📚 docs/README.md](docs/README.md) | Documentation navigation guide |
+| [📖 Cross-Tenant-VNet-Peering-Guide.md](docs/Cross-Tenant-VNet-Peering-Guide.md) | Complete manual implementation guide |
+| [💡 EXAMPLES.md](docs/EXAMPLES.md) | Real-world usage scenarios |
 
 ### Important Considerations
 
