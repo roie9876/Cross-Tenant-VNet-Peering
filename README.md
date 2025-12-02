@@ -73,6 +73,8 @@ This repository provides **two deployment methods** for creating VNet peering be
 - **Two-sided deployment:** This creates YOUR side only. ISV must deploy their side separately.
 - **No admin needed:** You don't need Owner/Contributor, just the custom role!
 
+❓ **New to this?** Read [Why Custom Role and Two-Sided Deployment?](docs/WHY-CUSTOM-ROLE-AND-TWO-SIDED.md)
+
 **For ISVs:** Share this button with customers. See [docs/ISV-CUSTOMER-GUIDE.md](docs/ISV-CUSTOMER-GUIDE.md) for email templates and workflow.
 
 **Full Guide:** [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
@@ -280,6 +282,7 @@ Cross-Tenant-VNet-Peering/
 | Document | Description |
 |----------|-------------|
 | [📚 docs/README.md](docs/README.md) | Documentation navigation guide |
+| [❓ WHY-CUSTOM-ROLE-AND-TWO-SIDED.md](docs/WHY-CUSTOM-ROLE-AND-TWO-SIDED.md) | **Why custom role? Why two deployments? Explained!** |
 | [📖 Cross-Tenant-VNet-Peering-Guide.md](docs/Cross-Tenant-VNet-Peering-Guide.md) | Complete manual implementation guide |
 | [💡 EXAMPLES.md](docs/EXAMPLES.md) | Real-world usage scenarios |
 
