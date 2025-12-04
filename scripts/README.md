@@ -67,19 +67,19 @@ For detailed prerequisites, see: [../docs/PREREQUISITES.md](../docs/PREREQUISITE
 Edit the **CONFIGURATION SECTION** in `create-cross-tenant-vnet-peering.sh`:
 
 ```bash
-# Tenant A Configuration
-TENANT_A_ID="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-TENANT_A_SUBSCRIPTION_ID="your-subscription-a-id"
-TENANT_A_RESOURCE_GROUP="your-resource-group-a"
-TENANT_A_VNET_NAME="your-vnet-a-name"
-TENANT_A_PEERING_NAME="peer-tenantA-to-tenantB"
+# ISV Tenant Configuration
+ISV_ID="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+ISV_SUBSCRIPTION_ID="your-subscription-a-id"
+ISV_RESOURCE_GROUP="your-resource-group-a"
+ISV_VNET_NAME="your-vnet-a-name"
+ISV_PEERING_NAME="peer-tenantA-to-tenantB"
 
-# Tenant B Configuration
-TENANT_B_ID="yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy"
-TENANT_B_SUBSCRIPTION_ID="your-subscription-b-id"
-TENANT_B_RESOURCE_GROUP="your-resource-group-b"
-TENANT_B_VNET_NAME="your-vnet-b-name"
-TENANT_B_PEERING_NAME="peer-tenantB-to-tenantA"
+# Customer Tenant Configuration
+CUSTOMER_ID="yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy"
+CUSTOMER_SUBSCRIPTION_ID="your-subscription-b-id"
+CUSTOMER_RESOURCE_GROUP="your-resource-group-b"
+CUSTOMER_VNET_NAME="your-vnet-b-name"
+CUSTOMER_PEERING_NAME="peer-tenantB-to-tenantA"
 
 # Peering Options
 ALLOW_VNET_ACCESS="true"
@@ -99,13 +99,13 @@ The script performs these steps:
    - Checks configuration completeness
    - Verifies required tools
 
-2. **Tenant A - Gather Information**
-   - Authenticates to Tenant A
+2. **ISV Tenant - Gather Information**
+   - Authenticates to ISV Tenant
    - Retrieves VNet details
    - Captures VNet resource ID and address space
 
-3. **Tenant B - Gather Information**
-   - Authenticates to Tenant B
+3. **Customer Tenant - Gather Information**
+   - Authenticates to Customer Tenant
    - Retrieves VNet details
    - Captures VNet resource ID and address space
 
@@ -117,13 +117,13 @@ The script performs these steps:
    - Shows complete configuration
    - Requests user confirmation
 
-6. **Create Peering - Tenant A to B**
-   - Authenticates to Tenant A
+6. **Create Peering - ISV Tenant to B**
+   - Authenticates to ISV Tenant
    - Creates peering connection
    - Displays initial status
 
-7. **Create Peering - Tenant B to A**
-   - Authenticates to Tenant B
+7. **Create Peering - Customer Tenant to A**
+   - Authenticates to Customer Tenant
    - Creates peering connection
    - Displays initial status
 
@@ -141,14 +141,14 @@ The script performs these steps:
 [SUCCESS] Configuration validated
 
 ==========================================
-STEP 1: Gathering VNet information from Tenant A
+STEP 1: Gathering VNet information from ISV Tenant
 ==========================================
 
-[INFO] Logging into Tenant A...
-[SUCCESS] Logged into Tenant A
-[INFO] Retrieving VNet information from Tenant A...
-[SUCCESS] Tenant A VNet ID: /subscriptions/.../virtualNetworks/vnet-a
-[SUCCESS] Tenant A Address Space: 192.168.0.0/16
+[INFO] Logging into ISV Tenant...
+[SUCCESS] Logged into ISV Tenant
+[INFO] Retrieving VNet information from ISV Tenant...
+[SUCCESS] ISV Tenant VNet ID: /subscriptions/.../virtualNetworks/vnet-a
+[SUCCESS] ISV Tenant Address Space: 192.168.0.0/16
 
 ...
 

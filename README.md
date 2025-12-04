@@ -97,8 +97,8 @@ Read **[docs/PREREQUISITES.md](docs/PREREQUISITES.md)** to understand:
 Create the `vnet-peer` custom role in **both** tenants (required for both methods):
 
 ```bash
-# Tenant A
-az login --tenant <TENANT_A_ID>
+# ISV Tenant
+az login --tenant <ISV_ID>
 az account set --subscription <SUBSCRIPTION_A_ID>
 
 # Edit templates/vnet-peer-role.json and update assignableScopes
@@ -109,11 +109,11 @@ az role assignment create \
   --role "vnet-peer" \
   --scope "/subscriptions/<SUBSCRIPTION_A_ID>/resourceGroups/<RESOURCE_GROUP_A>"
 
-# Tenant B (repeat with Tenant B values)
-az login --tenant <TENANT_B_ID>
+# Customer Tenant (repeat with Customer Tenant values)
+az login --tenant <CUSTOMER_ID>
 az account set --subscription <SUBSCRIPTION_B_ID>
 
-# Update templates/vnet-peer-role.json with Tenant B subscription and resource group
+# Update templates/vnet-peer-role.json with Customer Tenant subscription and resource group
 az role definition create --role-definition templates/vnet-peer-role.json
 
 az role assignment create \
@@ -127,19 +127,19 @@ az role assignment create \
 Edit `scripts/create-cross-tenant-vnet-peering.sh` and update the configuration section:
 
 ```bash
-# Tenant A Configuration
-TENANT_A_ID="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-TENANT_A_SUBSCRIPTION_ID="your-subscription-a-id"
-TENANT_A_RESOURCE_GROUP="your-resource-group-a"
-TENANT_A_VNET_NAME="your-vnet-a-name"
-TENANT_A_PEERING_NAME="peer-tenantA-to-tenantB"
+# ISV Tenant Configuration
+ISV_ID="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+ISV_SUBSCRIPTION_ID="your-subscription-a-id"
+ISV_RESOURCE_GROUP="your-resource-group-a"
+ISV_VNET_NAME="your-vnet-a-name"
+ISV_PEERING_NAME="peer-tenantA-to-tenantB"
 
-# Tenant B Configuration
-TENANT_B_ID="yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy"
-TENANT_B_SUBSCRIPTION_ID="your-subscription-b-id"
-TENANT_B_RESOURCE_GROUP="your-resource-group-b"
-TENANT_B_VNET_NAME="your-vnet-b-name"
-TENANT_B_PEERING_NAME="peer-tenantB-to-tenantA"
+# Customer Tenant Configuration
+CUSTOMER_ID="yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy"
+CUSTOMER_SUBSCRIPTION_ID="your-subscription-b-id"
+CUSTOMER_RESOURCE_GROUP="your-resource-group-b"
+CUSTOMER_VNET_NAME="your-vnet-b-name"
+CUSTOMER_PEERING_NAME="peer-tenantB-to-tenantA"
 
 # Peering Options
 ALLOW_VNET_ACCESS="true"
@@ -301,20 +301,20 @@ VNets must have **non-overlapping** IP address ranges:
 
 ✅ **Valid:**
 ```
-Tenant A: 192.168.0.0/16
-Tenant B: 10.0.0.0/16
+ISV Tenant: 192.168.0.0/16
+Customer Tenant: 10.0.0.0/16
 ```
 
 ❌ **Invalid:**
 ```
-Tenant A: 10.0.0.0/16
-Tenant B: 10.1.0.0/16  (both in 10.x.x.x range)
+ISV Tenant: 10.0.0.0/16
+Customer Tenant: 10.1.0.0/16  (both in 10.x.x.x range)
 ```
 
 #### Bidirectional Peering
 Cross-tenant peering requires **both sides** to be created separately:
-1. Peering from Tenant A to Tenant B
-2. Peering from Tenant B to Tenant A
+1. Peering from ISV Tenant to Customer Tenant
+2. Peering from Customer Tenant to ISV Tenant
 
 Both must exist for the connection to be established.
 
@@ -325,13 +325,13 @@ After running the script, verify the peering is working:
 ### Check Peering Status
 
 ```bash
-# Tenant A
+# ISV Tenant
 az network vnet peering list \
   --resource-group <RG_A> \
   --vnet-name <VNET_A> \
   --output table
 
-# Tenant B
+# Customer Tenant
 az network vnet peering list \
   --resource-group <RG_B> \
   --vnet-name <VNET_B> \
@@ -348,11 +348,11 @@ az network vnet peering list \
 Deploy test VMs in each VNet and verify network connectivity:
 
 ```bash
-# From VM in Tenant A
-ping <IP_ADDRESS_IN_TENANT_B>
+# From VM in ISV Tenant
+ping <IP_ADDRESS_IN_CUSTOMER>
 
-# From VM in Tenant B
-ping <IP_ADDRESS_IN_TENANT_A>
+# From VM in Customer Tenant
+ping <IP_ADDRESS_IN_ISV>
 ```
 
 ## 🛠️ Troubleshooting
@@ -361,7 +361,7 @@ ping <IP_ADDRESS_IN_TENANT_A>
 
 #### Peering State: "Initiated"
 **Cause:** Only one side of the peering has been created.
-**Solution:** Ensure both Tenant A and Tenant B peering connections are created.
+**Solution:** Ensure both ISV Tenant and Customer Tenant peering connections are created.
 
 #### "User not authorized"
 **Cause:** Missing `vnet-peer` role assignment.
@@ -398,7 +398,7 @@ This is significantly more restrictive than Owner or Contributor roles.
 ## 🔗 Architecture
 
 ```
-Tenant A (Your Organization)           Tenant B (Partner Organization)
+ISV Tenant (Your Organization)           Customer Tenant (Partner Organization)
 Subscription: xxx-xxx-xxx              Subscription: yyy-yyy-yyy
 ├── Resource Group: rg-tenant-a        ├── Resource Group: rg-tenant-b
     └── VNet: vnet-tenant-a                └── VNet: vnet-tenant-b

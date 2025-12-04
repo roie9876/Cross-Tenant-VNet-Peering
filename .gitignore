@@ -8,7 +8,6 @@
 config-private.sh
 .env
 .env.local
-
 # Azure CLI outputs
 azure-output.json
 vnet-info.json

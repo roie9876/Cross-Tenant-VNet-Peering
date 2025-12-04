@@ -1,10 +1,10 @@
 #!/bin/bash
 
 ################################################################################
-# Cross-Tenant VNet Peering Automation Script
+# Cross-Tenant VNet Peering Automation Script (Generic Template)
 # 
 # This script automates the creation of VNet peering between two Azure tenants
-# using custom RBAC roles with least-privilege access.
+# (ISV Tenant and Customer Tenant) using custom RBAC roles with least-privilege access.
 #
 # Prerequisites: See PREREQUISITES.md before running this script
 ################################################################################
@@ -46,28 +46,63 @@ validate_address_space() {
     return 0
 }
 
+# Function to get access token for auxiliary authorization
+get_access_token() {
+    local tenant_id=$1
+    local client_id=$2
+    local client_secret=$3
+    
+    # Get token using curl
+    response=$(curl -s -X POST "https://login.microsoftonline.com/$tenant_id/oauth2/v2.0/token" \
+        -d "grant_type=client_credentials" \
+        -d "client_id=$client_id" \
+        --data-urlencode "client_secret=$client_secret" \
+        -d "scope=https://management.azure.com/.default")
+        
+    # Extract token
+    token=$(echo "$response" | jq -r '.access_token')
+    
+    if [[ "$token" == "null" ]] || [[ -z "$token" ]]; then
+        print_error "Failed to get access token for tenant $tenant_id"
+        echo "$response" >&2
+        return 1
+    fi
+    
+    echo "$token"
+}
+
 ################################################################################
 # CONFIGURATION SECTION
 # Update these variables for your environment
 ################################################################################
 
-# ISV Tenant Configuration
-ISV_TENANT_ID=""                    # e.g., "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-ISV_SUBSCRIPTION_ID=""       # Subscription ID in ISV Tenant
-ISV_RESOURCE_GROUP=""        # Resource group name in ISV Tenant
-ISV_VNET_NAME=""             # VNet name in ISV Tenant
-ISV_PEERING_NAME=""          # Name for peering connection (e.g., "peer-ISV-to-Customer")
+# ISV Tenant Configuration (Tenant A)
+ISV_TENANT_ID="<ISV_TENANT_ID>"                    # e.g., "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+ISV_SUBSCRIPTION_ID="<ISV_SUBSCRIPTION_ID>"       # Subscription ID in ISV Tenant
+ISV_RESOURCE_GROUP="<ISV_RESOURCE_GROUP>"        # Resource group name in ISV Tenant
+ISV_VNET_NAME="<ISV_VNET_NAME>"             # VNet name in ISV Tenant
+ISV_PEERING_NAME="peer-ISV-to-Customer"          # Name for peering connection
 
-# Customer Tenant Configuration
-CUSTOMER_TENANT_ID=""                    # e.g., "yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy"
-CUSTOMER_SUBSCRIPTION_ID=""       # Subscription ID in Customer Tenant
-CUSTOMER_RESOURCE_GROUP=""        # Resource group name in Customer Tenant
-CUSTOMER_VNET_NAME=""             # VNet name in Customer Tenant
-CUSTOMER_PEERING_NAME=""          # Name for peering connection (e.g., "peer-Customer-to-ISV")
+# SPN Credentials for ISV Tenant
+ISV_CLIENT_ID="<ISV_CLIENT_ID>"             # App ID for Service Principal in ISV Tenant
+ISV_CLIENT_SECRET="<ISV_CLIENT_SECRET>"         # Client Secret for Service Principal in ISV Tenant
+
+# Customer Tenant Configuration (Tenant B)
+CUSTOMER_TENANT_ID="<CUSTOMER_TENANT_ID>"                    # e.g., "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+CUSTOMER_SUBSCRIPTION_ID="<CUSTOMER_SUBSCRIPTION_ID>"       # Subscription ID in Customer Tenant
+CUSTOMER_RESOURCE_GROUP="<CUSTOMER_RESOURCE_GROUP>"        # Resource group name in Customer Tenant
+CUSTOMER_VNET_NAME="<CUSTOMER_VNET_NAME>"             # VNet name in Customer Tenant
+CUSTOMER_PEERING_NAME="peer-Customer-to-ISV"          # Name for peering connection
+
+# SPN Credentials for Customer Tenant
+# NOTE: We use the SAME Service Principal as ISV Tenant, because the onboarding script
+# registered the ISV's App inside the Customer Tenant.
+CUSTOMER_CLIENT_ID="$ISV_CLIENT_ID"             # Using ISV App ID
+CUSTOMER_CLIENT_SECRET="$ISV_CLIENT_SECRET"     # Using ISV App Secret
 
 # Peering Options (set to true/false)
 ALLOW_VNET_ACCESS="true"          # Allow VNet access (required for basic connectivity)
-ALLOW_FORWARDED_TRAFFIC="yes"   # Allow traffic forwarded by NVA
+ALLOW_FORWARDED_TRAFFIC="true"   # Allow traffic forwarded by NVA
 ALLOW_GATEWAY_TRANSIT_ISV="false"   # Allow gateway transit from ISV Tenant
 USE_REMOTE_GATEWAYS_ISV="false"     # Use remote gateways in ISV Tenant
 ALLOW_GATEWAY_TRANSIT_CUSTOMER="false"   # Allow gateway transit from Customer Tenant
@@ -97,13 +132,28 @@ fi
 # Validate required configuration variables
 print_info "Validating configuration..."
 
+if [[ "$ISV_TENANT_ID" == "<ISV_TENANT_ID>" ]]; then
+    print_error "Please update the configuration variables with your actual values."
+    exit 1
+fi
+
 if [[ -z "$ISV_TENANT_ID" ]]; then
     print_error "ISV_TENANT_ID is not set. Please configure the script."
     exit 1
 fi
 
+if [[ -z "$ISV_CLIENT_ID" ]] || [[ -z "$ISV_CLIENT_SECRET" ]]; then
+    print_error "ISV SPN credentials are not set. Please configure ISV_CLIENT_ID and ISV_CLIENT_SECRET."
+    exit 1
+fi
+
 if [[ -z "$CUSTOMER_TENANT_ID" ]]; then
     print_error "CUSTOMER_TENANT_ID is not set. Please configure the script."
+    exit 1
+fi
+
+if [[ -z "$CUSTOMER_CLIENT_ID" ]] || [[ -z "$CUSTOMER_CLIENT_SECRET" ]]; then
+    print_error "Customer SPN credentials are not set. Please configure CUSTOMER_CLIENT_ID and CUSTOMER_CLIENT_SECRET."
     exit 1
 fi
 
@@ -131,7 +181,7 @@ print_success "Configuration validated"
 echo ""
 
 ################################################################################
-# TENANT A - GATHER VNET INFORMATION
+# ISV TENANT - GATHER VNET INFORMATION
 ################################################################################
 
 print_info "=========================================="
@@ -140,7 +190,7 @@ print_info "=========================================="
 echo ""
 
 print_info "Logging into ISV Tenant..."
-az login --tenant "$ISV_TENANT_ID" --use-device-code
+az login --service-principal -u "$ISV_CLIENT_ID" -p "$ISV_CLIENT_SECRET" --tenant "$ISV_TENANT_ID"
 print_success "Logged into ISV Tenant"
 
 print_info "Setting subscription context to ISV Tenant..."
@@ -162,12 +212,12 @@ fi
 ISV_VNET_ID=$(echo "$ISV_VNET_INFO" | jq -r '.id')
 ISV_ADDRESS_SPACE=$(echo "$ISV_VNET_INFO" | jq -r '.addressSpace')
 
-print_success "ISV Tenant VNet ID: $ISV_VNET_ID"
-print_success "ISV Tenant Address Space: $ISV_ADDRESS_SPACE"
+print_success "ISV VNet ID: $ISV_VNET_ID"
+print_success "ISV Address Space: $ISV_ADDRESS_SPACE"
 echo ""
 
 ################################################################################
-# TENANT B - GATHER VNET INFORMATION
+# CUSTOMER TENANT - GATHER VNET INFORMATION
 ################################################################################
 
 print_info "=========================================="
@@ -176,11 +226,11 @@ print_info "=========================================="
 echo ""
 
 print_info "Logging into Customer Tenant..."
-az login --tenant "$CUSTOMER_TENANT_ID" --use-device-code
+az login --service-principal -u "$CUSTOMER_CLIENT_ID" -p "$CUSTOMER_CLIENT_SECRET" --tenant "$CUSTOMER_TENANT_ID" --allow-no-subscriptions
 print_success "Logged into Customer Tenant"
 
 print_info "Setting subscription context to Customer Tenant..."
-az account set --subscription "$CUSTOMER_SUBSCRIPTION_ID"
+az account set --subscription "$CUSTOMER_SUBSCRIPTION_ID" || print_warning "Could not set subscription context. Proceeding with REST API..."
 print_success "Subscription set to: $CUSTOMER_SUBSCRIPTION_ID"
 
 print_info "Retrieving VNet information from Customer Tenant..."
@@ -198,8 +248,8 @@ fi
 CUSTOMER_VNET_ID=$(echo "$CUSTOMER_VNET_INFO" | jq -r '.id')
 CUSTOMER_ADDRESS_SPACE=$(echo "$CUSTOMER_VNET_INFO" | jq -r '.addressSpace')
 
-print_success "Customer Tenant VNet ID: $CUSTOMER_VNET_ID"
-print_success "Customer Tenant Address Space: $CUSTOMER_ADDRESS_SPACE"
+print_success "Customer VNet ID: $CUSTOMER_VNET_ID"
+print_success "Customer Address Space: $CUSTOMER_ADDRESS_SPACE"
 echo ""
 
 ################################################################################
@@ -260,10 +310,10 @@ echo ""
 echo "Peering Options:"
 echo "  Allow VNet Access:          $ALLOW_VNET_ACCESS"
 echo "  Allow Forwarded Traffic:    $ALLOW_FORWARDED_TRAFFIC"
-echo "  Gateway Transit (ISV Tenant): $ALLOW_GATEWAY_TRANSIT_ISV"
-echo "  Use Remote Gateways (A):    $USE_REMOTE_GATEWAYS_ISV"
-echo "  Gateway Transit (Customer Tenant): $ALLOW_GATEWAY_TRANSIT_CUSTOMER"
-echo "  Use Remote Gateways (B):    $USE_REMOTE_GATEWAYS_CUSTOMER"
+echo "  Gateway Transit (ISV):      $ALLOW_GATEWAY_TRANSIT_ISV"
+echo "  Use Remote Gateways (ISV):  $USE_REMOTE_GATEWAYS_ISV"
+echo "  Gateway Transit (Customer): $ALLOW_GATEWAY_TRANSIT_CUSTOMER"
+echo "  Use Remote Gateways (Cust): $USE_REMOTE_GATEWAYS_CUSTOMER"
 echo ""
 
 print_warning "Ready to create cross-tenant VNet peering. Continue? (y/n)"
@@ -275,7 +325,7 @@ fi
 echo ""
 
 ################################################################################
-# CREATE PEERING FROM TENANT A TO TENANT B
+# CREATE PEERING FROM ISV TENANT TO CUSTOMER TENANT
 ################################################################################
 
 print_info "=========================================="
@@ -284,39 +334,43 @@ print_info "=========================================="
 echo ""
 
 print_info "Logging into ISV Tenant..."
-az login --tenant "$ISV_TENANT_ID" --use-device-code > /dev/null 2>&1
+az login --service-principal -u "$ISV_CLIENT_ID" -p "$ISV_CLIENT_SECRET" --tenant "$ISV_TENANT_ID" > /dev/null 2>&1
 az account set --subscription "$ISV_SUBSCRIPTION_ID"
 print_success "Logged into ISV Tenant"
 
 print_info "Creating peering: $ISV_PEERING_NAME"
 
 # Build the command with options
-PEERING_CMD_ISV="az network vnet peering create \
-    --name \"$ISV_PEERING_NAME\" \
-    --resource-group \"$ISV_RESOURCE_GROUP\" \
-    --vnet-name \"$ISV_VNET_NAME\" \
-    --remote-vnet \"$CUSTOMER_VNET_ID\""
+# Using az rest to bypass cross-tenant authentication checks that fail with isolated SPNs
+print_info "Using REST API to create peering (bypassing remote tenant check)..."
 
-if [[ "$ALLOW_VNET_ACCESS" == "true" ]]; then
-    PEERING_CMD_ISV="$PEERING_CMD_A --allow-vnet-access"
-fi
+# Convert variables to JSON booleans
+JSON_ALLOW_VNET_ACCESS=$(if [[ "$ALLOW_VNET_ACCESS" == "true" ]]; then echo "true"; else echo "false"; fi)
+JSON_ALLOW_FORWARDED_TRAFFIC=$(if [[ "$ALLOW_FORWARDED_TRAFFIC" == "true" ]]; then echo "true"; else echo "false"; fi)
+JSON_ALLOW_GATEWAY_TRANSIT_ISV=$(if [[ "$ALLOW_GATEWAY_TRANSIT_ISV" == "true" ]]; then echo "true"; else echo "false"; fi)
+JSON_USE_REMOTE_GATEWAYS_ISV=$(if [[ "$USE_REMOTE_GATEWAYS_ISV" == "true" ]]; then echo "true"; else echo "false"; fi)
 
-if [[ "$ALLOW_FORWARDED_TRAFFIC" == "true" ]]; then
-    PEERING_CMD_ISV="$PEERING_CMD_A --allow-forwarded-traffic"
-fi
+print_info "Generating auxiliary token for Customer Tenant (to prove access to remote VNet)..."
+AUX_TOKEN_CUSTOMER=$(get_access_token "$CUSTOMER_TENANT_ID" "$ISV_CLIENT_ID" "$ISV_CLIENT_SECRET")
+if [[ $? -ne 0 ]]; then exit 1; fi
 
-if [[ "$ALLOW_GATEWAY_TRANSIT_ISV" == "true" ]]; then
-    PEERING_CMD_ISV="$PEERING_CMD_A --allow-gateway-transit"
-fi
-
-if [[ "$USE_REMOTE_GATEWAYS_ISV" == "true" ]]; then
-    PEERING_CMD_ISV="$PEERING_CMD_A --use-remote-gateways"
-fi
+PEERING_CMD_ISV="az rest --method put \
+    --uri /subscriptions/$ISV_SUBSCRIPTION_ID/resourceGroups/$ISV_RESOURCE_GROUP/providers/Microsoft.Network/virtualNetworks/$ISV_VNET_NAME/virtualNetworkPeerings/$ISV_PEERING_NAME?api-version=2022-07-01 \
+    --headers \"x-ms-authorization-auxiliary=Bearer $AUX_TOKEN_CUSTOMER\" \
+    --body '{
+        \"properties\": {
+            \"remoteVirtualNetwork\": {
+                \"id\": \"$CUSTOMER_VNET_ID\"
+            },
+            \"allowVirtualNetworkAccess\": $JSON_ALLOW_VNET_ACCESS,
+            \"allowForwardedTraffic\": $JSON_ALLOW_FORWARDED_TRAFFIC,
+            \"allowGatewayTransit\": $JSON_ALLOW_GATEWAY_TRANSIT_ISV,
+            \"useRemoteGateways\": $JSON_USE_REMOTE_GATEWAYS_ISV
+        }
+    }'"
 
 # Execute the command
-eval "$PEERING_CMD_ISV" > /dev/null 2>&1
-
-if [[ $? -eq 0 ]]; then
+if eval "$PEERING_CMD_ISV"; then
     print_success "Peering created successfully from ISV Tenant"
     
     # Get peering status
@@ -335,7 +389,7 @@ fi
 echo ""
 
 ################################################################################
-# CREATE PEERING FROM TENANT B TO TENANT A
+# CREATE PEERING FROM CUSTOMER TENANT TO ISV TENANT
 ################################################################################
 
 print_info "=========================================="
@@ -344,39 +398,46 @@ print_info "=========================================="
 echo ""
 
 print_info "Logging into Customer Tenant..."
-az login --tenant "$CUSTOMER_TENANT_ID" --use-device-code > /dev/null 2>&1
-az account set --subscription "$CUSTOMER_SUBSCRIPTION_ID"
+az login --service-principal -u "$CUSTOMER_CLIENT_ID" -p "$CUSTOMER_CLIENT_SECRET" --tenant "$CUSTOMER_TENANT_ID" --allow-no-subscriptions
 print_success "Logged into Customer Tenant"
+
+print_info "Setting subscription context to Customer Tenant..."
+az account set --subscription "$CUSTOMER_SUBSCRIPTION_ID" || print_warning "Could not set subscription context. Proceeding with REST API..."
+print_success "Subscription set to: $CUSTOMER_SUBSCRIPTION_ID"
 
 print_info "Creating peering: $CUSTOMER_PEERING_NAME"
 
 # Build the command with options
-PEERING_CMD_CUSTOMER="az network vnet peering create \
-    --name \"$CUSTOMER_PEERING_NAME\" \
-    --resource-group \"$CUSTOMER_RESOURCE_GROUP\" \
-    --vnet-name \"$CUSTOMER_VNET_NAME\" \
-    --remote-vnet \"$ISV_VNET_ID\""
+# Using az rest to bypass cross-tenant authentication checks that fail with isolated SPNs
+print_info "Using REST API to create peering (bypassing remote tenant check)..."
 
-if [[ "$ALLOW_VNET_ACCESS" == "true" ]]; then
-    PEERING_CMD_CUSTOMER="$PEERING_CMD_B --allow-vnet-access"
-fi
+# Convert variables to JSON booleans
+JSON_ALLOW_VNET_ACCESS=$(if [[ "$ALLOW_VNET_ACCESS" == "true" ]]; then echo "true"; else echo "false"; fi)
+JSON_ALLOW_FORWARDED_TRAFFIC=$(if [[ "$ALLOW_FORWARDED_TRAFFIC" == "true" ]]; then echo "true"; else echo "false"; fi)
+JSON_ALLOW_GATEWAY_TRANSIT_CUSTOMER=$(if [[ "$ALLOW_GATEWAY_TRANSIT_CUSTOMER" == "true" ]]; then echo "true"; else echo "false"; fi)
+JSON_USE_REMOTE_GATEWAYS_CUSTOMER=$(if [[ "$USE_REMOTE_GATEWAYS_CUSTOMER" == "true" ]]; then echo "true"; else echo "false"; fi)
 
-if [[ "$ALLOW_FORWARDED_TRAFFIC" == "true" ]]; then
-    PEERING_CMD_CUSTOMER="$PEERING_CMD_B --allow-forwarded-traffic"
-fi
+print_info "Generating auxiliary token for ISV Tenant (to prove access to remote VNet)..."
+AUX_TOKEN_ISV=$(get_access_token "$ISV_TENANT_ID" "$CUSTOMER_CLIENT_ID" "$CUSTOMER_CLIENT_SECRET")
+if [[ $? -ne 0 ]]; then exit 1; fi
 
-if [[ "$ALLOW_GATEWAY_TRANSIT_CUSTOMER" == "true" ]]; then
-    PEERING_CMD_CUSTOMER="$PEERING_CMD_B --allow-gateway-transit"
-fi
-
-if [[ "$USE_REMOTE_GATEWAYS_CUSTOMER" == "true" ]]; then
-    PEERING_CMD_CUSTOMER="$PEERING_CMD_B --use-remote-gateways"
-fi
+PEERING_CMD_CUSTOMER="az rest --method put \
+    --uri /subscriptions/$CUSTOMER_SUBSCRIPTION_ID/resourceGroups/$CUSTOMER_RESOURCE_GROUP/providers/Microsoft.Network/virtualNetworks/$CUSTOMER_VNET_NAME/virtualNetworkPeerings/$CUSTOMER_PEERING_NAME?api-version=2022-07-01 \
+    --headers \"x-ms-authorization-auxiliary=Bearer $AUX_TOKEN_ISV\" \
+    --body '{
+        \"properties\": {
+            \"remoteVirtualNetwork\": {
+                \"id\": \"$ISV_VNET_ID\"
+            },
+            \"allowVirtualNetworkAccess\": $JSON_ALLOW_VNET_ACCESS,
+            \"allowForwardedTraffic\": $JSON_ALLOW_FORWARDED_TRAFFIC,
+            \"allowGatewayTransit\": $JSON_ALLOW_GATEWAY_TRANSIT_CUSTOMER,
+            \"useRemoteGateways\": $JSON_USE_REMOTE_GATEWAYS_CUSTOMER
+        }
+    }'"
 
 # Execute the command
-eval "$PEERING_CMD_CUSTOMER" > /dev/null 2>&1
-
-if [[ $? -eq 0 ]]; then
+if eval "$PEERING_CMD_CUSTOMER"; then
     print_success "Peering created successfully from Customer Tenant"
     
     # Get peering status
@@ -408,7 +469,7 @@ sleep 5
 
 # Check ISV Tenant
 print_info "Checking peering status in ISV Tenant..."
-az login --tenant "$ISV_TENANT_ID" --use-device-code > /dev/null 2>&1
+az login --service-principal -u "$ISV_CLIENT_ID" -p "$ISV_CLIENT_SECRET" --tenant "$ISV_TENANT_ID" > /dev/null 2>&1
 az account set --subscription "$ISV_SUBSCRIPTION_ID"
 
 FINAL_STATUS_ISV=$(az network vnet peering list \
@@ -424,7 +485,7 @@ echo ""
 
 # Check Customer Tenant
 print_info "Checking peering status in Customer Tenant..."
-az login --tenant "$CUSTOMER_TENANT_ID" --use-device-code > /dev/null 2>&1
+az login --service-principal -u "$CUSTOMER_CLIENT_ID" -p "$CUSTOMER_CLIENT_SECRET" --tenant "$CUSTOMER_TENANT_ID" > /dev/null 2>&1
 az account set --subscription "$CUSTOMER_SUBSCRIPTION_ID"
 
 FINAL_STATUS_CUSTOMER=$(az network vnet peering list \
