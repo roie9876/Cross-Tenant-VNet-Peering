@@ -46,11 +46,7 @@ CUSTOMER_VNETS="vnet-customer-spoke"
 
 ## Deployment Options (CLI Only)
 
-### Option 1: User-Based Script (Interactive)
-Use `scripts/create-cross-tenant-vnet-peering.sh` if you want a single script that logs into both tenants with a user account and creates peerings.
-The user must have `vnet-peer` role (or equivalent) in each tenant’s RG; Owner/Contributor is not required unless creating roles or resources outside peering.
-
-### Option 2: SPN-First Automation (Recommended for CI/CD)
+### Option 1: SPN-First Automation (Recommended for CI/CD)
 Use the SPN-first scripts if you want automation with service principals:
 - `scripts/isv-setup.sh` (ISV app/SPN + role + optional RG/VNet)
 - `scripts/customer-setup.sh` (Customer app/SPN + role + optional RG/VNet, supports multiple RG scopes)
@@ -62,6 +58,10 @@ Use the SPN-first scripts if you want automation with service principals:
 - `scripts/customer-cleanup.sh` (Customer cleanup of roles, SPN, and optional RG/VNet)
 - `scripts/isv-peering-delete.sh` (Delete ISV-side peerings)
 - `scripts/customer-peering-delete.sh` (Delete customer-side peerings)
+
+### Option 2: User-Based Script (Interactive)
+Use `scripts/create-cross-tenant-vnet-peering.sh` if you want a single script that logs into both tenants with a user account and creates peerings.
+The user must have `vnet-peer` role (or equivalent) in each tenant’s RG; Owner/Contributor is not required unless creating roles or resources outside peering.
 
 ## Quick Start (SPN-First)
 
