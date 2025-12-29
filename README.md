@@ -82,7 +82,12 @@ Use the SPN-first scripts if you want automation with service principals:
 - Run `scripts/isv-peering.sh`
 - Run `scripts/customer-peering.sh`
 
-Example multi-VNet input format for peering scripts:
+Example multi-VNet input format for peering scripts (simple):
+```
+CUSTOMER_VNETS="vnet-cust-1,vnet-cust-2"
+ISV_VNETS="vnet-isv-hub"
+```
+Advanced format (when VNets are in different RGs or subscriptions):
 ```
 CUSTOMER_VNETS="sub-b-1111:rg-cust-1/vnet-cust-1,sub-b-2222:rg-cust-2/vnet-cust-2"
 ISV_VNETS="sub-a-1111:rg-isv-hub/vnet-isv-hub"
