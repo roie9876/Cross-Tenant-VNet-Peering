@@ -44,26 +44,6 @@ CUSTOMER_RESOURCE_GROUP="rg-customer-spoke"
 CUSTOMER_VNETS="vnet-customer-spoke"
 ```
 
-## Env File Checklist
-
-Use these as the minimum required values before running each script.
-
-**ISV-side scripts (from `scripts/isv.env.sh`)**
-- `scripts/isv-setup.sh`: `ISV_TENANT_ID`, `ISV_SUBSCRIPTION_ID`, `ISV_RESOURCE_GROUP`, `ISV_VNET_NAME`, `ISV_APP_DISPLAY_NAME`  
-  - If `CREATE_NEW_RG_VNET="true"` also set: `ISV_LOCATION`, `ISV_VNET_ADDRESS_SPACE`, `ISV_SUBNET_NAME`, `ISV_SUBNET_PREFIX`
-- `scripts/isv-register-customer-spn.sh`: `ISV_TENANT_ID`, `ISV_SUBSCRIPTION_ID`, `ISV_RESOURCE_GROUP`, `CUSTOMER_APP_ID`
-- `scripts/isv-peering.sh`: `ISV_TENANT_ID`, `ISV_SUBSCRIPTION_ID`, `ISV_APP_ID`, `ISV_APP_SECRET`, `ISV_RESOURCE_GROUP`, `ISV_VNET_NAME`, `CUSTOMER_TENANT_ID`, `CUSTOMER_SUBSCRIPTION_ID`, `CUSTOMER_RESOURCE_GROUP`, `CUSTOMER_VNETS`
-- `scripts/isv-peering-delete.sh`: same as `scripts/isv-peering.sh`
-- `scripts/isv-cleanup.sh`: `ISV_TENANT_ID`, `ISV_SUBSCRIPTION_ID`, `ISV_RESOURCE_GROUP`, `ISV_VNET_NAME`, `ISV_APP_ID`
-
-**Customer-side scripts (from `scripts/customer.env.sh`)**
-- `scripts/customer-setup.sh`: `CUSTOMER_TENANT_ID`, `CUSTOMER_SUBSCRIPTION_ID`, `CUSTOMER_RESOURCE_GROUP`, `CUSTOMER_VNET_NAME`, `CUSTOMER_APP_DISPLAY_NAME`  
-  - If `CREATE_NEW_RG_VNET="true"` also set: `CUSTOMER_LOCATION`, `CUSTOMER_VNET_ADDRESS_SPACE`, `CUSTOMER_SUBNET_NAME`, `CUSTOMER_SUBNET_PREFIX`
-- `scripts/customer-register-isv-spn.sh`: `CUSTOMER_TENANT_ID`, `CUSTOMER_SUBSCRIPTION_ID`, `CUSTOMER_RESOURCE_GROUP`, `ISV_APP_ID`
-- `scripts/customer-peering.sh`: `CUSTOMER_TENANT_ID`, `CUSTOMER_SUBSCRIPTION_ID`, `CUSTOMER_APP_ID`, `CUSTOMER_APP_SECRET`, `CUSTOMER_RESOURCE_GROUP`, `CUSTOMER_VNET_NAME`, `ISV_TENANT_ID`, `ISV_SUBSCRIPTION_ID`, `ISV_RESOURCE_GROUP`, `ISV_VNETS`
-- `scripts/customer-peering-delete.sh`: same as `scripts/customer-peering.sh`
-- `scripts/customer-cleanup.sh`: `CUSTOMER_TENANT_ID`, `CUSTOMER_SUBSCRIPTION_ID`, `CUSTOMER_RESOURCE_GROUP`, `CUSTOMER_VNET_NAME`, `CUSTOMER_APP_ID`
-
 ## Deployment Options (CLI Only)
 
 ### Option 1: User-Based Script (Interactive)
@@ -85,12 +65,14 @@ Use the SPN-first scripts if you want automation with service principals:
 ## Quick Start (SPN-First)
 
 1) ISV admin runs:
-- Fill `scripts/isv.env.sh`
-- Run it and copy `ISV_APP_ID` and `ISV_APP_SECRET`
+- Fill `scripts/isv.env.sh` (leave `ISV_APP_ID` and `ISV_APP_SECRET` empty)
+- Run `scripts/isv-setup.sh` to create the ISV app/SPN
+- Copy the output values and paste them into `scripts/isv.env.sh`
 
 2) Customer admin runs:
-- Fill `scripts/customer.env.sh`
-- Run it and copy `CUSTOMER_APP_ID` and `CUSTOMER_APP_SECRET`
+- Fill `scripts/customer.env.sh` (leave `CUSTOMER_APP_ID` and `CUSTOMER_APP_SECRET` empty)
+- Run `scripts/customer-setup.sh` to create the customer app/SPN
+- Copy the output values and paste them into `scripts/customer.env.sh`
 
 3) Cross-tenant registration:
 - Run `scripts/isv-register-customer-spn.sh`
