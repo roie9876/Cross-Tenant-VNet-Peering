@@ -4,6 +4,21 @@ This directory contains bash scripts for automating cross-tenant VNet peering.
 
 ## Files
 
+## High-Level Flow (SPN-First)
+
+**Actors**
+- ISV Admin: Owner/Contributor + User Access Administrator + App Admin in ISV tenant
+- Customer Admin: Owner/Contributor + User Access Administrator + App Admin in customer tenant
+- ISV SPN: service principal created by ISV Admin
+- Customer SPN: service principal created by Customer Admin
+
+**Steps**
+1) ISV Admin runs `scripts/isv-setup.sh` to create RG/VNet (optional), custom role, ISV SPN + secret.
+2) Customer Admin runs `scripts/customer-setup.sh` to create RG/VNet (optional), custom role, Customer SPN + secret.
+3) Each admin re-runs their setup script with the other side’s App ID to register the external SPN and assign roles.
+4) ISV runs `scripts/isv-peering.sh` using the ISV SPN to create peerings to customer VNets.
+5) Customer runs `scripts/customer-peering.sh` using the Customer SPN to create peerings to ISV VNets.
+
 ### `create-cross-tenant-vnet-peering.sh`
 Main automation script that creates VNet peering between two Azure tenants.
 
