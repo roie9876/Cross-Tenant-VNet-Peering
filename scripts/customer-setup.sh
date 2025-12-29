@@ -14,33 +14,20 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ENV_FILE="${SCRIPT_DIR}/customer.env.sh"
+if [[ ! -f "$ENV_FILE" ]]; then
+  echo "[ERROR] Missing ${ENV_FILE}. Create it from the template and fill values." >&2
+  exit 1
+fi
+# shellcheck source=/dev/null
+source "$ENV_FILE"
+
 ###############################################################################
 # CONFIGURATION
 ###############################################################################
 
-# Tenant/subscription
-CUSTOMER_TENANT_ID=""
-CUSTOMER_SUBSCRIPTION_ID=""
-CUSTOMER_LOCATION="eastus"
-
-# RG/VNet options
-CREATE_NEW_RG_VNET="false"  # true = create new RG+VNet, false = use existing
-CUSTOMER_RESOURCE_GROUP="rg-customer-spoke"
-CUSTOMER_VNET_NAME="vnet-customer-spoke"
-CUSTOMER_VNET_ADDRESS_SPACE="10.100.0.0/16"
-CUSTOMER_SUBNET_NAME="default"
-CUSTOMER_SUBNET_PREFIX="10.100.1.0/24"
-
-# SPN creation
-CUSTOMER_APP_DISPLAY_NAME="customer-vnet-peering-spn"
-
-# Optional: when you have the ISV App ID, set it here to register in customer tenant
-ISV_APP_ID=""
-
-# Role assignment scopes (RG level), comma-separated list:
-# Format: "SUB_ID:RG_NAME,SUB_ID:RG_NAME,RG_NAME"
-# If SUB_ID is omitted, CUSTOMER_SUBSCRIPTION_ID is used.
-CUSTOMER_ROLE_SCOPES=""
+# Values are loaded from scripts/customer.env.sh
 
 ###############################################################################
 # HELPERS
@@ -54,6 +41,26 @@ fail() {
 info() {
   echo "[INFO] $1"
 }
+
+require_value() {
+  local name="$1"
+  local value="$2"
+  if [[ -z "$value" ]]; then
+    fail "Missing required value: $name (set it in scripts/customer.env.sh)"
+  fi
+}
+
+require_value "CUSTOMER_TENANT_ID" "$CUSTOMER_TENANT_ID"
+require_value "CUSTOMER_SUBSCRIPTION_ID" "$CUSTOMER_SUBSCRIPTION_ID"
+require_value "CUSTOMER_RESOURCE_GROUP" "$CUSTOMER_RESOURCE_GROUP"
+require_value "CUSTOMER_VNET_NAME" "$CUSTOMER_VNET_NAME"
+require_value "CUSTOMER_APP_DISPLAY_NAME" "$CUSTOMER_APP_DISPLAY_NAME"
+if [[ "$CREATE_NEW_RG_VNET" == "true" ]]; then
+  require_value "CUSTOMER_LOCATION" "$CUSTOMER_LOCATION"
+  require_value "CUSTOMER_VNET_ADDRESS_SPACE" "$CUSTOMER_VNET_ADDRESS_SPACE"
+  require_value "CUSTOMER_SUBNET_NAME" "$CUSTOMER_SUBNET_NAME"
+  require_value "CUSTOMER_SUBNET_PREFIX" "$CUSTOMER_SUBNET_PREFIX"
+fi
 
 parse_scope_entry() {
   local entry="$1"
@@ -146,9 +153,48 @@ for item in "${SCOPE_ITEMS[@]}"; do
   ROLE_SCOPES+=("$(parse_scope_entry "$item")")
 done
 
+ROLE_ID=$(az role definition list --name "$ROLE_NAME" --query "[0].name" -o tsv 2>/dev/null || true)
+
 ROLE_FILE="$(mktemp)"
-cat > "$ROLE_FILE" <<EOF
+if [[ -z "$ROLE_ID" ]]; then
+  cat > "$ROLE_FILE" <<EOF
 {
+  "Name": "${ROLE_NAME}",
+  "IsCustom": true,
+  "Description": "Allow VNet peering, sync and UDR changes on the scoped VNets.",
+  "Actions": [
+    "Microsoft.Network/virtualNetworks/read",
+    "Microsoft.Network/virtualNetworks/write",
+    "Microsoft.Network/virtualNetworks/subnets/read",
+    "Microsoft.Network/virtualNetworks/subnets/write",
+    "Microsoft.Network/virtualNetworks/virtualNetworkPeerings/read",
+    "Microsoft.Network/virtualNetworks/virtualNetworkPeerings/write",
+    "Microsoft.Network/virtualNetworks/virtualNetworkPeerings/delete",
+    "Microsoft.Network/virtualNetworks/peer/action",
+    "Microsoft.Network/routeTables/read",
+    "Microsoft.Network/routeTables/write",
+    "Microsoft.Network/routeTables/delete",
+    "Microsoft.Network/routeTables/routes/read",
+    "Microsoft.Network/routeTables/routes/write",
+    "Microsoft.Network/routeTables/routes/delete",
+    "Microsoft.Network/routeTables/join/action",
+    "Microsoft.Network/networkSecurityGroups/read",
+    "Microsoft.Network/networkSecurityGroups/join/action"
+  ],
+  "NotActions": [],
+  "DataActions": [],
+  "NotDataActions": [],
+  "AssignableScopes": [
+    "$(printf '%s' "${ROLE_SCOPES[0]}")"
+  ]
+}
+EOF
+  info "Creating custom role: $ROLE_NAME"
+  az role definition create --role-definition "$ROLE_FILE" >/dev/null
+else
+  cat > "$ROLE_FILE" <<EOF
+{
+  "name": "${ROLE_ID}",
   "properties": {
     "roleName": "${ROLE_NAME}",
     "description": "Allow VNet peering, sync and UDR changes on the scoped VNets.",
@@ -184,9 +230,7 @@ cat > "$ROLE_FILE" <<EOF
   }
 }
 EOF
-
-info "Creating or updating custom role: $ROLE_NAME"
-if ! az role definition create --role-definition "$ROLE_FILE" >/dev/null 2>&1; then
+  info "Updating custom role: $ROLE_NAME"
   az role definition update --role-definition "$ROLE_FILE" >/dev/null
 fi
 rm -f "$ROLE_FILE"
@@ -240,8 +284,10 @@ CUSTOMER_VNET_NAME=${CUSTOMER_VNET_NAME}
 CUSTOMER_VNET_ID=${CUSTOMER_VNET_ID}
 CUSTOMER_APP_ID=${CUSTOMER_APP_ID}
 CUSTOMER_APP_SECRET=${CUSTOMER_APP_SECRET}
+CUSTOMER_VNETS_EXAMPLE="${CUSTOMER_SUBSCRIPTION_ID}:${CUSTOMER_RESOURCE_GROUP}/${CUSTOMER_VNET_NAME}"
 
 Next steps:
 - Share CUSTOMER_APP_ID with the ISV admin.
 - Store CUSTOMER_APP_SECRET securely; it is required for the peering script.
+- Paste CUSTOMER_APP_ID and CUSTOMER_APP_SECRET into scripts/customer.env.sh
 EOF

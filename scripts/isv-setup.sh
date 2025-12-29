@@ -14,28 +14,20 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ENV_FILE="${SCRIPT_DIR}/isv.env.sh"
+if [[ ! -f "$ENV_FILE" ]]; then
+  echo "[ERROR] Missing ${ENV_FILE}. Create it from the template and fill values." >&2
+  exit 1
+fi
+# shellcheck source=/dev/null
+source "$ENV_FILE"
+
 ###############################################################################
 # CONFIGURATION
 ###############################################################################
 
-# Tenant/subscription
-ISV_TENANT_ID=""
-ISV_SUBSCRIPTION_ID=""
-ISV_LOCATION="eastus"
-
-# RG/VNet options
-CREATE_NEW_RG_VNET="true"  # true = create new RG+VNet, false = use existing
-ISV_RESOURCE_GROUP="rg-isv-hub"
-ISV_VNET_NAME="vnet-isv-hub"
-ISV_VNET_ADDRESS_SPACE="10.0.0.0/16"
-ISV_SUBNET_NAME="default"
-ISV_SUBNET_PREFIX="10.0.1.0/24"
-
-# SPN creation
-ISV_APP_DISPLAY_NAME="isv-vnet-peering-spn"
-
-# Optional: when you have the customer's App ID, set it here to register in ISV tenant
-CUSTOMER_APP_ID=""
+# Values are loaded from scripts/isv.env.sh
 
 ###############################################################################
 # HELPERS
@@ -49,6 +41,26 @@ fail() {
 info() {
   echo "[INFO] $1"
 }
+
+require_value() {
+  local name="$1"
+  local value="$2"
+  if [[ -z "$value" ]]; then
+    fail "Missing required value: $name (set it in scripts/isv.env.sh)"
+  fi
+}
+
+require_value "ISV_TENANT_ID" "$ISV_TENANT_ID"
+require_value "ISV_SUBSCRIPTION_ID" "$ISV_SUBSCRIPTION_ID"
+require_value "ISV_RESOURCE_GROUP" "$ISV_RESOURCE_GROUP"
+require_value "ISV_VNET_NAME" "$ISV_VNET_NAME"
+require_value "ISV_APP_DISPLAY_NAME" "$ISV_APP_DISPLAY_NAME"
+if [[ "$CREATE_NEW_RG_VNET" == "true" ]]; then
+  require_value "ISV_LOCATION" "$ISV_LOCATION"
+  require_value "ISV_VNET_ADDRESS_SPACE" "$ISV_VNET_ADDRESS_SPACE"
+  require_value "ISV_SUBNET_NAME" "$ISV_SUBNET_NAME"
+  require_value "ISV_SUBNET_PREFIX" "$ISV_SUBNET_PREFIX"
+fi
 
 ###############################################################################
 # LOGIN AND CONTEXT
@@ -111,9 +123,48 @@ ISV_APP_SECRET=$(az ad app credential reset \
 ROLE_NAME="vnet-peer"
 ROLE_SCOPE="/subscriptions/${ISV_SUBSCRIPTION_ID}/resourceGroups/${ISV_RESOURCE_GROUP}"
 
+ROLE_ID=$(az role definition list --name "$ROLE_NAME" --query "[0].name" -o tsv 2>/dev/null || true)
+
 ROLE_FILE="$(mktemp)"
-cat > "$ROLE_FILE" <<EOF
+if [[ -z "$ROLE_ID" ]]; then
+  cat > "$ROLE_FILE" <<EOF
 {
+  "Name": "${ROLE_NAME}",
+  "IsCustom": true,
+  "Description": "Allow VNet peering, sync and UDR changes on the scoped VNets.",
+  "Actions": [
+    "Microsoft.Network/virtualNetworks/read",
+    "Microsoft.Network/virtualNetworks/write",
+    "Microsoft.Network/virtualNetworks/subnets/read",
+    "Microsoft.Network/virtualNetworks/subnets/write",
+    "Microsoft.Network/virtualNetworks/virtualNetworkPeerings/read",
+    "Microsoft.Network/virtualNetworks/virtualNetworkPeerings/write",
+    "Microsoft.Network/virtualNetworks/virtualNetworkPeerings/delete",
+    "Microsoft.Network/virtualNetworks/peer/action",
+    "Microsoft.Network/routeTables/read",
+    "Microsoft.Network/routeTables/write",
+    "Microsoft.Network/routeTables/delete",
+    "Microsoft.Network/routeTables/routes/read",
+    "Microsoft.Network/routeTables/routes/write",
+    "Microsoft.Network/routeTables/routes/delete",
+    "Microsoft.Network/routeTables/join/action",
+    "Microsoft.Network/networkSecurityGroups/read",
+    "Microsoft.Network/networkSecurityGroups/join/action"
+  ],
+  "NotActions": [],
+  "DataActions": [],
+  "NotDataActions": [],
+  "AssignableScopes": [
+    "${ROLE_SCOPE}"
+  ]
+}
+EOF
+  info "Creating custom role: $ROLE_NAME"
+  az role definition create --role-definition "$ROLE_FILE" >/dev/null
+else
+  cat > "$ROLE_FILE" <<EOF
+{
+  "name": "${ROLE_ID}",
   "properties": {
     "roleName": "${ROLE_NAME}",
     "description": "Allow VNet peering, sync and UDR changes on the scoped VNets.",
@@ -149,9 +200,7 @@ cat > "$ROLE_FILE" <<EOF
   }
 }
 EOF
-
-info "Creating or updating custom role: $ROLE_NAME"
-if ! az role definition create --role-definition "$ROLE_FILE" >/dev/null 2>&1; then
+  info "Updating custom role: $ROLE_NAME"
   az role definition update --role-definition "$ROLE_FILE" >/dev/null
 fi
 rm -f "$ROLE_FILE"
@@ -201,8 +250,10 @@ ISV_VNET_NAME=${ISV_VNET_NAME}
 ISV_VNET_ID=${ISV_VNET_ID}
 ISV_APP_ID=${ISV_APP_ID}
 ISV_APP_SECRET=${ISV_APP_SECRET}
+ISV_VNETS_EXAMPLE="${ISV_SUBSCRIPTION_ID}:${ISV_RESOURCE_GROUP}/${ISV_VNET_NAME}"
 
 Next steps:
 - Share ISV_APP_ID with the customer admin.
 - Store ISV_APP_SECRET securely; it is required for the peering script.
+- Paste ISV_APP_ID and ISV_APP_SECRET into scripts/isv.env.sh
 EOF

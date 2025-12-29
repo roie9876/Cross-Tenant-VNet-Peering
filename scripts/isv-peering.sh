@@ -3,30 +3,26 @@
 # ISV peering script (SPN login).
 # Creates peering from the ISV VNet to one or more customer VNets.
 #
-# Expected list format for CUSTOMER_VNETS:
-#   "SUB_ID:RG_NAME/VNET_NAME,SUB_ID:RG_NAME/VNET_NAME,RG_NAME/VNET_NAME"
-# If SUB_ID is omitted, CUSTOMER_SUBSCRIPTION_ID is used.
-#
-# Example:
-#   CUSTOMER_VNETS="sub-b-1111:rg-cust-1/vnet-cust-1,sub-b-2222:rg-cust-2/vnet-cust-2"
+# CUSTOMER_VNETS format:
+#   Simple: "vnet-customer-spoke,vnet-customer-2" (uses CUSTOMER_RESOURCE_GROUP and CUSTOMER_SUBSCRIPTION_ID)
+#   Advanced: "SUB_ID:RG_NAME/VNET_NAME,RG_NAME/VNET_NAME"
 
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ENV_FILE="${SCRIPT_DIR}/isv.env.sh"
+if [[ ! -f "$ENV_FILE" ]]; then
+  echo "[ERROR] Missing ${ENV_FILE}. Create it from the template and fill values." >&2
+  exit 1
+fi
+# shellcheck source=/dev/null
+source "$ENV_FILE"
 
 ###############################################################################
 # CONFIGURATION
 ###############################################################################
 
-ISV_TENANT_ID=""
-ISV_SUBSCRIPTION_ID=""
-ISV_APP_ID=""
-ISV_APP_SECRET=""
-
-ISV_RESOURCE_GROUP=""
-ISV_VNET_NAME=""
-
-CUSTOMER_SUBSCRIPTION_ID=""  # used when entries in CUSTOMER_VNETS do not include a subscription
-CUSTOMER_VNETS=""
-
+# Values are loaded from scripts/isv.env.sh
 ISV_PEERING_NAME_PREFIX="peer-isv-to-customer"
 
 # Peering options
@@ -48,6 +44,25 @@ info() {
   echo "[INFO] $1"
 }
 
+require_value() {
+  local name="$1"
+  local value="$2"
+  if [[ -z "$value" ]]; then
+    fail "Missing required value: $name (set it in scripts/isv.env.sh)"
+  fi
+}
+
+require_value "ISV_TENANT_ID" "$ISV_TENANT_ID"
+require_value "ISV_SUBSCRIPTION_ID" "$ISV_SUBSCRIPTION_ID"
+require_value "ISV_APP_ID" "$ISV_APP_ID"
+require_value "ISV_APP_SECRET" "$ISV_APP_SECRET"
+require_value "ISV_RESOURCE_GROUP" "$ISV_RESOURCE_GROUP"
+require_value "ISV_VNET_NAME" "$ISV_VNET_NAME"
+require_value "CUSTOMER_TENANT_ID" "$CUSTOMER_TENANT_ID"
+require_value "CUSTOMER_SUBSCRIPTION_ID" "$CUSTOMER_SUBSCRIPTION_ID"
+require_value "CUSTOMER_RESOURCE_GROUP" "$CUSTOMER_RESOURCE_GROUP"
+require_value "CUSTOMER_VNETS" "$CUSTOMER_VNETS"
+
 parse_vnet_entry() {
   local entry="$1"
   local sub_id rg vnet rest
@@ -61,11 +76,16 @@ parse_vnet_entry() {
     rest="$entry"
   fi
 
-  rg="${rest%%/*}"
-  vnet="${rest#*/}"
+  if [[ "$rest" == *"/"* ]]; then
+    rg="${rest%%/*}"
+    vnet="${rest#*/}"
+  else
+    rg="$CUSTOMER_RESOURCE_GROUP"
+    vnet="$rest"
+  fi
 
-  if [[ -z "$sub_id" || -z "$rg" || -z "$vnet" || "$rg" == "$rest" ]]; then
-    fail "Invalid VNet entry: $entry (expected SUB_ID:RG/VNET or RG/VNET)"
+  if [[ -z "$sub_id" || -z "$rg" || -z "$vnet" ]]; then
+    fail "Invalid VNet entry: $entry (expected VNET, RG/VNET, or SUB_ID:RG/VNET)"
   fi
 
   echo "${sub_id}|${rg}|${vnet}"
@@ -110,7 +130,7 @@ for item in "${VNET_ITEMS[@]}"; do
   peering_name="${ISV_PEERING_NAME_PREFIX}-${customer_vnet}"
 
   info "Creating ISV peering: $peering_name -> $remote_id"
-  az network vnet peering create \
+  if ! output=$(az network vnet peering create \
     --name "$peering_name" \
     --resource-group "$ISV_RESOURCE_GROUP" \
     --vnet-name "$ISV_VNET_NAME" \
@@ -118,7 +138,16 @@ for item in "${VNET_ITEMS[@]}"; do
     --allow-vnet-access "$ALLOW_VNET_ACCESS" \
     --allow-forwarded-traffic "$ALLOW_FORWARDED_TRAFFIC" \
     --allow-gateway-transit "$ALLOW_GATEWAY_TRANSIT" \
-    --use-remote-gateways "$USE_REMOTE_GATEWAYS" >/dev/null
+    --use-remote-gateways "$USE_REMOTE_GATEWAYS" 2>&1); then
+    echo "$output" >&2
+    if echo "$output" | grep -E -q "missing service principal|AADSTS7000229"; then
+      info "Customer SPN likely not registered in customer tenant."
+      info "Ask customer admin to run scripts/customer-register-isv-spn.sh"
+      info "Or use admin consent URL:"
+      info "https://login.microsoftonline.com/${CUSTOMER_TENANT_ID}/adminconsent?client_id=${ISV_APP_ID}"
+    fi
+    exit 1
+  fi
 done
 
 info "ISV peering creation complete."

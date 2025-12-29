@@ -49,3 +49,5 @@ temp/
 config.sh
 my-config.sh
 local-config.sh
+scripts/isv.env.sh
+scripts/customer.env.sh

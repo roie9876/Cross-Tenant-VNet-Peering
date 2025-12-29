@@ -24,6 +24,46 @@ This repository automates cross-tenant VNet peering using Azure CLI and least-pr
 4) ISV runs `scripts/isv-peering.sh` using the ISV SPN to create peerings to customer VNets.
 5) Customer runs `scripts/customer-peering.sh` using the Customer SPN to create peerings to ISV VNets.
 
+## Shared Configuration (No Re-typing)
+
+All scripts load values from:
+- `scripts/isv.env.sh` for ISV-side scripts
+- `scripts/customer.env.sh` for customer-side scripts
+
+Fill those files once and reuse across all steps.
+These files are gitignored to keep secrets out of source control.
+
+Example (ISV side):
+```bash
+ISV_TENANT_ID="..."
+ISV_SUBSCRIPTION_ID="..."
+ISV_RESOURCE_GROUP="rg-isv-hub"
+ISV_VNET_NAME="vnet-isv-hub"
+CUSTOMER_SUBSCRIPTION_ID="..."
+CUSTOMER_RESOURCE_GROUP="rg-customer-spoke"
+CUSTOMER_VNETS="vnet-customer-spoke"
+```
+
+## Env File Checklist
+
+Use these as the minimum required values before running each script.
+
+**ISV-side scripts (from `scripts/isv.env.sh`)**
+- `scripts/isv-setup.sh`: `ISV_TENANT_ID`, `ISV_SUBSCRIPTION_ID`, `ISV_RESOURCE_GROUP`, `ISV_VNET_NAME`, `ISV_APP_DISPLAY_NAME`  
+  - If `CREATE_NEW_RG_VNET="true"` also set: `ISV_LOCATION`, `ISV_VNET_ADDRESS_SPACE`, `ISV_SUBNET_NAME`, `ISV_SUBNET_PREFIX`
+- `scripts/isv-register-customer-spn.sh`: `ISV_TENANT_ID`, `ISV_SUBSCRIPTION_ID`, `ISV_RESOURCE_GROUP`, `CUSTOMER_APP_ID`
+- `scripts/isv-peering.sh`: `ISV_TENANT_ID`, `ISV_SUBSCRIPTION_ID`, `ISV_APP_ID`, `ISV_APP_SECRET`, `ISV_RESOURCE_GROUP`, `ISV_VNET_NAME`, `CUSTOMER_TENANT_ID`, `CUSTOMER_SUBSCRIPTION_ID`, `CUSTOMER_RESOURCE_GROUP`, `CUSTOMER_VNETS`
+- `scripts/isv-peering-delete.sh`: same as `scripts/isv-peering.sh`
+- `scripts/isv-cleanup.sh`: `ISV_TENANT_ID`, `ISV_SUBSCRIPTION_ID`, `ISV_RESOURCE_GROUP`, `ISV_VNET_NAME`, `ISV_APP_ID`
+
+**Customer-side scripts (from `scripts/customer.env.sh`)**
+- `scripts/customer-setup.sh`: `CUSTOMER_TENANT_ID`, `CUSTOMER_SUBSCRIPTION_ID`, `CUSTOMER_RESOURCE_GROUP`, `CUSTOMER_VNET_NAME`, `CUSTOMER_APP_DISPLAY_NAME`  
+  - If `CREATE_NEW_RG_VNET="true"` also set: `CUSTOMER_LOCATION`, `CUSTOMER_VNET_ADDRESS_SPACE`, `CUSTOMER_SUBNET_NAME`, `CUSTOMER_SUBNET_PREFIX`
+- `scripts/customer-register-isv-spn.sh`: `CUSTOMER_TENANT_ID`, `CUSTOMER_SUBSCRIPTION_ID`, `CUSTOMER_RESOURCE_GROUP`, `ISV_APP_ID`
+- `scripts/customer-peering.sh`: `CUSTOMER_TENANT_ID`, `CUSTOMER_SUBSCRIPTION_ID`, `CUSTOMER_APP_ID`, `CUSTOMER_APP_SECRET`, `CUSTOMER_RESOURCE_GROUP`, `CUSTOMER_VNET_NAME`, `ISV_TENANT_ID`, `ISV_SUBSCRIPTION_ID`, `ISV_RESOURCE_GROUP`, `ISV_VNETS`
+- `scripts/customer-peering-delete.sh`: same as `scripts/customer-peering.sh`
+- `scripts/customer-cleanup.sh`: `CUSTOMER_TENANT_ID`, `CUSTOMER_SUBSCRIPTION_ID`, `CUSTOMER_RESOURCE_GROUP`, `CUSTOMER_VNET_NAME`, `CUSTOMER_APP_ID`
+
 ## Deployment Options (CLI Only)
 
 ### Option 1: User-Based Script (Interactive)
@@ -33,25 +73,32 @@ Use `scripts/create-cross-tenant-vnet-peering.sh` if you want a single script th
 Use the SPN-first scripts if you want automation with service principals:
 - `scripts/isv-setup.sh` (ISV app/SPN + role + optional RG/VNet)
 - `scripts/customer-setup.sh` (Customer app/SPN + role + optional RG/VNet, supports multiple RG scopes)
+- `scripts/isv-register-customer-spn.sh` (Register customer SPN in ISV tenant, assign role)
+- `scripts/customer-register-isv-spn.sh` (Register ISV SPN in customer tenant, assign role)
 - `scripts/isv-peering.sh` (ISV creates peering to customer VNets)
 - `scripts/customer-peering.sh` (Customer creates peering to ISV VNets)
+- `scripts/isv-cleanup.sh` (ISV cleanup of roles, SPN, and optional RG/VNet)
+- `scripts/customer-cleanup.sh` (Customer cleanup of roles, SPN, and optional RG/VNet)
+- `scripts/isv-peering-delete.sh` (Delete ISV-side peerings)
+- `scripts/customer-peering-delete.sh` (Delete customer-side peerings)
 
 ## Quick Start (SPN-First)
 
 1) ISV admin runs:
-- Configure `scripts/isv-setup.sh`
+- Fill `scripts/isv.env.sh`
 - Run it and copy `ISV_APP_ID` and `ISV_APP_SECRET`
 
 2) Customer admin runs:
-- Configure `scripts/customer-setup.sh`
+- Fill `scripts/customer.env.sh`
 - Run it and copy `CUSTOMER_APP_ID` and `CUSTOMER_APP_SECRET`
 
 3) Cross-tenant registration:
-- Re-run each setup script with the other tenant's App ID set
+- Run `scripts/isv-register-customer-spn.sh`
+- Run `scripts/customer-register-isv-spn.sh`
 
 4) Create peerings:
-- Configure and run `scripts/isv-peering.sh`
-- Configure and run `scripts/customer-peering.sh`
+- Run `scripts/isv-peering.sh`
+- Run `scripts/customer-peering.sh`
 
 Example multi-VNet input format for peering scripts:
 ```
@@ -79,8 +126,12 @@ Cross-Tenant-VNet-Peering/
 │   └── EXAMPLES.md                 # Usage scenarios and examples
 ├── scripts/                        # Automation scripts (CLI only)
 │   ├── create-cross-tenant-vnet-peering.sh   # User-based flow (interactive)
+│   ├── isv.env.sh                  # ISV config (local, not committed)
+│   ├── customer.env.sh             # Customer config (local, not committed)
 │   ├── isv-setup.sh                # ISV setup (SPN-first)
 │   ├── customer-setup.sh           # Customer setup (SPN-first)
+│   ├── isv-register-customer-spn.sh # ISV registration-only
+│   ├── customer-register-isv-spn.sh # Customer registration-only
 │   ├── isv-peering.sh              # ISV peering (SPN-first)
 │   ├── customer-peering.sh         # Customer peering (SPN-first)
 │   └── config-template.sh          # Optional config template
