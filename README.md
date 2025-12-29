@@ -7,7 +7,7 @@ This repository automates cross-tenant VNet peering using Azure CLI and least-pr
 - Creates bidirectional VNet peering across two Azure tenants.
 - Uses a custom `vnet-peer` role scoped to resource groups.
 - Supports both a user-based flow and an SPN-first flow.
-- Validates address space overlap and peering status.
+- The user-based script validates address space overlap and peering status.
 
 ## High-Level Flow (SPN-First)
 
