@@ -77,9 +77,8 @@ Use the SPN-first scripts if you want automation with service principals:
 3) Cross-tenant registration:
 - Run `scripts/isv-register-customer-spn.sh`
 - Run `scripts/customer-register-isv-spn.sh`
-  - These scripts must be run by tenant admins (Owner/Contributor + User Access Administrator + App Admin)
-  - `scripts/isv-register-customer-spn.sh` runs in the ISV tenant
-  - `scripts/customer-register-isv-spn.sh` runs in the customer tenant
+  - `scripts/isv-register-customer-spn.sh`: run as **ISV tenant admin** (Owner/Contributor + User Access Administrator + App Admin) in the **ISV tenant**
+  - `scripts/customer-register-isv-spn.sh`: run as **customer tenant admin** (Owner/Contributor + User Access Administrator + App Admin) in the **customer tenant**
 
 4) Create peerings:
 - Run `scripts/isv-peering.sh`
