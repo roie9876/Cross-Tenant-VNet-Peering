@@ -52,15 +52,40 @@ require_value() {
 
 require_value "CUSTOMER_TENANT_ID" "$CUSTOMER_TENANT_ID"
 require_value "CUSTOMER_SUBSCRIPTION_ID" "$CUSTOMER_SUBSCRIPTION_ID"
-require_value "CUSTOMER_RESOURCE_GROUP" "$CUSTOMER_RESOURCE_GROUP"
-require_value "CUSTOMER_VNET_NAME" "$CUSTOMER_VNET_NAME"
 require_value "CUSTOMER_APP_DISPLAY_NAME" "$CUSTOMER_APP_DISPLAY_NAME"
 if [[ "$CREATE_NEW_RG_VNET" == "true" ]]; then
   require_value "CUSTOMER_LOCATION" "$CUSTOMER_LOCATION"
-  require_value "CUSTOMER_VNET_ADDRESS_SPACE" "$CUSTOMER_VNET_ADDRESS_SPACE"
-  require_value "CUSTOMER_SUBNET_NAME" "$CUSTOMER_SUBNET_NAME"
-  require_value "CUSTOMER_SUBNET_PREFIX" "$CUSTOMER_SUBNET_PREFIX"
 fi
+
+get_customer_vnet_indices() {
+  local indices=()
+  local var
+  for var in ${!CUSTOMER_VNET_NAME_@}; do
+    local idx="${var##*_}"
+    if [[ -n "${!var}" ]]; then
+      indices+=("$idx")
+    fi
+  done
+  echo "${indices[@]}"
+}
+
+get_var() {
+  local name="$1"
+  local value="${!name}"
+  echo "$value"
+}
+
+VNET_INDICES=($(get_customer_vnet_indices))
+if [[ ${#VNET_INDICES[@]} -eq 0 ]]; then
+  fail "No customer VNets defined. Set CUSTOMER_VNET_NAME_1 and related fields in scripts/customer.env.sh."
+fi
+
+for idx in "${VNET_INDICES[@]}"; do
+  require_value "CUSTOMER_VNET_NAME_${idx}" "$(get_var "CUSTOMER_VNET_NAME_${idx}")"
+  require_value "CUSTOMER_VNET_ADDRESS_SPACE_${idx}" "$(get_var "CUSTOMER_VNET_ADDRESS_SPACE_${idx}")"
+  require_value "CUSTOMER_SUBNET_NAME_${idx}" "$(get_var "CUSTOMER_SUBNET_NAME_${idx}")"
+  require_value "CUSTOMER_SUBNET_PREFIX_${idx}" "$(get_var "CUSTOMER_SUBNET_PREFIX_${idx}")"
+done
 
 parse_scope_entry() {
   local entry="$1"
@@ -100,21 +125,33 @@ if [[ "$CREATE_NEW_RG_VNET" == "true" ]]; then
   info "Ensuring resource group exists: $CUSTOMER_RESOURCE_GROUP"
   az group create --name "$CUSTOMER_RESOURCE_GROUP" --location "$CUSTOMER_LOCATION" >/dev/null
 
-  info "Creating or updating VNet: $CUSTOMER_VNET_NAME"
-  az network vnet create \
-    --resource-group "$CUSTOMER_RESOURCE_GROUP" \
-    --name "$CUSTOMER_VNET_NAME" \
-    --address-prefix "$CUSTOMER_VNET_ADDRESS_SPACE" \
-    --subnet-name "$CUSTOMER_SUBNET_NAME" \
-    --subnet-prefix "$CUSTOMER_SUBNET_PREFIX" >/dev/null
+  for idx in "${VNET_INDICES[@]}"; do
+    vnet_name="$(get_var "CUSTOMER_VNET_NAME_${idx}")"
+    vnet_space="$(get_var "CUSTOMER_VNET_ADDRESS_SPACE_${idx}")"
+    subnet_name="$(get_var "CUSTOMER_SUBNET_NAME_${idx}")"
+    subnet_prefix="$(get_var "CUSTOMER_SUBNET_PREFIX_${idx}")"
+
+    info "Creating or updating VNet: $vnet_name"
+    az network vnet create \
+      --resource-group "$CUSTOMER_RESOURCE_GROUP" \
+      --name "$vnet_name" \
+      --address-prefix "$vnet_space" \
+      --subnet-name "$subnet_name" \
+      --subnet-prefix "$subnet_prefix" >/dev/null
+  done
 else
-  info "Using existing RG/VNet: $CUSTOMER_RESOURCE_GROUP / $CUSTOMER_VNET_NAME"
+  info "Using existing RG/VNets in: $CUSTOMER_RESOURCE_GROUP"
 fi
 
-CUSTOMER_VNET_ID=$(az network vnet show \
-  --resource-group "$CUSTOMER_RESOURCE_GROUP" \
-  --name "$CUSTOMER_VNET_NAME" \
-  --query id -o tsv)
+CUSTOMER_VNET_IDS=()
+for idx in "${VNET_INDICES[@]}"; do
+  vnet_name="$(get_var "CUSTOMER_VNET_NAME_${idx}")"
+  vnet_id=$(az network vnet show \
+    --resource-group "$CUSTOMER_RESOURCE_GROUP" \
+    --name "$vnet_name" \
+    --query id -o tsv)
+  CUSTOMER_VNET_IDS+=("$vnet_id")
+done
 
 ###############################################################################
 # CREATE MULTI-TENANT APP REGISTRATION + SPN + SECRET
@@ -135,6 +172,34 @@ CUSTOMER_APP_SECRET=$(az ad app credential reset \
   --append \
   --display-name "customer-spn-secret-$(date +%Y%m%d)" \
   --query password -o tsv)
+
+info "Updating scripts/customer.env.sh with CUSTOMER_APP_ID and CUSTOMER_APP_SECRET"
+ENV_FILE_PATH="$ENV_FILE" CUSTOMER_APP_ID="$CUSTOMER_APP_ID" CUSTOMER_APP_SECRET="$CUSTOMER_APP_SECRET" python - <<'PY'
+from pathlib import Path
+import os
+
+env_path = Path(os.environ["ENV_FILE_PATH"])
+text = env_path.read_text()
+
+def set_var(name, value, content):
+    lines = content.splitlines()
+    out = []
+    found = False
+    for line in lines:
+        if line.startswith(f"{name}="):
+            out.append(f'{name}="{value}"')
+            found = True
+        else:
+            out.append(line)
+    if not found:
+        out.append(f'{name}="{value}"')
+    return "\n".join(out) + "\n"
+
+env = text
+env = set_var("CUSTOMER_APP_ID", os.environ["CUSTOMER_APP_ID"], env)
+env = set_var("CUSTOMER_APP_SECRET", os.environ["CUSTOMER_APP_SECRET"], env)
+env_path.write_text(env)
+PY
 
 ###############################################################################
 # CREATE/UPDATE CUSTOM ROLE AT RG SCOPE
@@ -280,11 +345,11 @@ cat <<EOF
 CUSTOMER_TENANT_ID=${CUSTOMER_TENANT_ID}
 CUSTOMER_SUBSCRIPTION_ID=${CUSTOMER_SUBSCRIPTION_ID}
 CUSTOMER_RESOURCE_GROUP=${CUSTOMER_RESOURCE_GROUP}
-CUSTOMER_VNET_NAME=${CUSTOMER_VNET_NAME}
-CUSTOMER_VNET_ID=${CUSTOMER_VNET_ID}
+CUSTOMER_VNET_NAMES=$(for idx in "${VNET_INDICES[@]}"; do printf "%s " "$(get_var "CUSTOMER_VNET_NAME_${idx}")"; done)
+CUSTOMER_VNET_IDS=$(printf "%s " "${CUSTOMER_VNET_IDS[@]}")
 CUSTOMER_APP_ID=${CUSTOMER_APP_ID}
 CUSTOMER_APP_SECRET=${CUSTOMER_APP_SECRET}
-CUSTOMER_VNETS_EXAMPLE="${CUSTOMER_SUBSCRIPTION_ID}:${CUSTOMER_RESOURCE_GROUP}/${CUSTOMER_VNET_NAME}"
+CUSTOMER_VNETS_EXAMPLE="$(for idx in "${VNET_INDICES[@]}"; do printf "%s " "$(get_var "CUSTOMER_VNET_NAME_${idx}")"; done)"
 
 Next steps:
 - Share CUSTOMER_APP_ID with the ISV admin.

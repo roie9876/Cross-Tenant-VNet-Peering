@@ -34,6 +34,18 @@ info() {
   echo "[INFO] $1"
 }
 
+get_customer_vnet_names() {
+  local names=()
+  local var
+  for var in ${!CUSTOMER_VNET_NAME_@}; do
+    local name="${!var}"
+    if [[ -n "$name" ]]; then
+      names+=("$name")
+    fi
+  done
+  echo "${names[@]}"
+}
+
 parse_vnet_entry() {
   local entry="$1"
   local sub_id rg vnet rest
@@ -90,20 +102,27 @@ if [[ ${#VNET_ITEMS[@]} -eq 0 ]]; then
   fail "ISV_VNETS is empty. Provide at least one VNet entry."
 fi
 
-for item in "${VNET_ITEMS[@]}"; do
-  parsed=$(parse_vnet_entry "$item")
-  isv_sub="${parsed%%|*}"
-  rest="${parsed#*|}"
-  isv_rg="${rest%%|*}"
-  isv_vnet="${rest#*|}"
+CUSTOMER_VNET_NAMES=($(get_customer_vnet_names))
+if [[ ${#CUSTOMER_VNET_NAMES[@]} -eq 0 ]]; then
+  fail "No customer VNets defined. Set CUSTOMER_VNET_NAME_1 and related fields in scripts/customer.env.sh."
+fi
 
-  peering_name="${CUSTOMER_PEERING_NAME_PREFIX}-${isv_vnet}"
+for customer_vnet in "${CUSTOMER_VNET_NAMES[@]}"; do
+  for item in "${VNET_ITEMS[@]}"; do
+    parsed=$(parse_vnet_entry "$item")
+    isv_sub="${parsed%%|*}"
+    rest="${parsed#*|}"
+    isv_rg="${rest%%|*}"
+    isv_vnet="${rest#*|}"
 
-  info "Deleting customer peering: $peering_name"
-  az network vnet peering delete \
-    --name "$peering_name" \
-    --resource-group "$CUSTOMER_RESOURCE_GROUP" \
-    --vnet-name "$CUSTOMER_VNET_NAME" >/dev/null 2>&1 || true
+    peering_name="${CUSTOMER_PEERING_NAME_PREFIX}-${customer_vnet}-to-${isv_vnet}"
+
+    info "Deleting customer peering: $peering_name"
+    az network vnet peering delete \
+      --name "$peering_name" \
+      --resource-group "$CUSTOMER_RESOURCE_GROUP" \
+      --vnet-name "$customer_vnet" >/dev/null 2>&1 || true
+  done
 done
 
 info "Customer peering deletion complete."

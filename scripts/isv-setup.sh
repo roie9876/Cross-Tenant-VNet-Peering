@@ -116,6 +116,34 @@ ISV_APP_SECRET=$(az ad app credential reset \
   --display-name "isv-spn-secret-$(date +%Y%m%d)" \
   --query password -o tsv)
 
+info "Updating scripts/isv.env.sh with ISV_APP_ID and ISV_APP_SECRET"
+ENV_FILE_PATH="$ENV_FILE" ISV_APP_ID="$ISV_APP_ID" ISV_APP_SECRET="$ISV_APP_SECRET" python - <<'PY'
+from pathlib import Path
+import os
+
+env_path = Path(os.environ["ENV_FILE_PATH"])
+text = env_path.read_text()
+
+def set_var(name, value, content):
+    lines = content.splitlines()
+    out = []
+    found = False
+    for line in lines:
+        if line.startswith(f"{name}="):
+            out.append(f'{name}="{value}"')
+            found = True
+        else:
+            out.append(line)
+    if not found:
+        out.append(f'{name}="{value}"')
+    return "\n".join(out) + "\n"
+
+env = text
+env = set_var("ISV_APP_ID", os.environ["ISV_APP_ID"], env)
+env = set_var("ISV_APP_SECRET", os.environ["ISV_APP_SECRET"], env)
+env_path.write_text(env)
+PY
+
 ###############################################################################
 # CREATE/UPDATE CUSTOM ROLE AT RG SCOPE
 ###############################################################################

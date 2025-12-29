@@ -29,6 +29,7 @@ source "$ENV_FILE"
 DELETE_ROLE_ASSIGNMENTS="true"
 DELETE_ROLE_DEFINITION="true"
 DELETE_CUSTOMER_APP="true"
+DELETE_UDR="true"
 DELETE_VNET="true"
 DELETE_RESOURCE_GROUP="true"
 
@@ -144,14 +145,53 @@ fi
 # VNET AND RESOURCE GROUP
 ###############################################################################
 
+get_customer_vnet_names() {
+  local names=()
+  local var
+  for var in ${!CUSTOMER_VNET_NAME_@}; do
+    local name="${!var}"
+    if [[ -n "$name" ]]; then
+      names+=("$name")
+    fi
+  done
+  echo "${names[@]}"
+}
+
+CUSTOMER_VNET_NAMES=($(get_customer_vnet_names))
+
+if [[ "${DELETE_UDR:-false}" == "true" ]]; then
+  CUSTOMER_UDR_NAME_PREFIX="udr-to-isv-lb"
+  for customer_vnet in "${CUSTOMER_VNET_NAMES[@]}"; do
+    udr_name="${CUSTOMER_UDR_NAME_PREFIX}-${customer_vnet}"
+    info "Removing route table from subnets in $customer_vnet"
+    for subnet in $(az network vnet subnet list \
+      --resource-group "$CUSTOMER_RESOURCE_GROUP" \
+      --vnet-name "$customer_vnet" \
+      --query "[].name" -o tsv); do
+      az network vnet subnet update \
+        --resource-group "$CUSTOMER_RESOURCE_GROUP" \
+        --vnet-name "$customer_vnet" \
+        --name "$subnet" \
+        --remove routeTable >/dev/null 2>&1 || true
+    done
+
+    info "Deleting route table: $udr_name"
+    az network route-table delete \
+      --name "$udr_name" \
+      --resource-group "$CUSTOMER_RESOURCE_GROUP" >/dev/null 2>&1 || true
+  done
+fi
+
 if [[ "$DELETE_RESOURCE_GROUP" == "true" ]]; then
   info "Deleting resource group: $CUSTOMER_RESOURCE_GROUP"
   az group delete --name "$CUSTOMER_RESOURCE_GROUP" --yes --no-wait >/dev/null 2>&1 || true
 elif [[ "$DELETE_VNET" == "true" ]]; then
-  info "Deleting VNet: $CUSTOMER_VNET_NAME"
-  az network vnet delete \
-    --name "$CUSTOMER_VNET_NAME" \
-    --resource-group "$CUSTOMER_RESOURCE_GROUP" >/dev/null 2>&1 || true
+  for customer_vnet in "${CUSTOMER_VNET_NAMES[@]}"; do
+    info "Deleting VNet: $customer_vnet"
+    az network vnet delete \
+      --name "$customer_vnet" \
+      --resource-group "$CUSTOMER_RESOURCE_GROUP" >/dev/null 2>&1 || true
+  done
 fi
 
 info "Customer cleanup complete."

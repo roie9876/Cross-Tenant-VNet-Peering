@@ -34,27 +34,16 @@ info() {
   echo "[INFO] $1"
 }
 
-parse_vnet_entry() {
-  local entry="$1"
-  local sub_id rg vnet rest
-
-  entry="${entry//[[:space:]]/}"
-  if [[ "$entry" == *":"* ]]; then
-    sub_id="${entry%%:*}"
-    rest="${entry#*:}"
-  else
-    sub_id="$CUSTOMER_SUBSCRIPTION_ID"
-    rest="$entry"
-  fi
-
-  rg="${rest%%/*}"
-  vnet="${rest#*/}"
-
-  if [[ -z "$sub_id" || -z "$rg" || -z "$vnet" || "$rg" == "$rest" ]]; then
-    fail "Invalid VNet entry: $entry (expected SUB_ID:RG/VNET or RG/VNET)"
-  fi
-
-  echo "${sub_id}|${rg}|${vnet}"
+get_customer_vnet_names() {
+  local names=()
+  local var
+  for var in ${!CUSTOMER_VNET_NAME_@}; do
+    local name="${!var}"
+    if [[ -n "$name" ]]; then
+      names+=("$name")
+    fi
+  done
+  echo "${names[@]}"
 }
 
 ###############################################################################
@@ -85,19 +74,13 @@ az account set --subscription "$ISV_SUBSCRIPTION_ID"
 # DELETE PEERINGS
 ###############################################################################
 
-IFS=',' read -r -a VNET_ITEMS <<< "$CUSTOMER_VNETS"
-if [[ ${#VNET_ITEMS[@]} -eq 0 ]]; then
-  fail "CUSTOMER_VNETS is empty. Provide at least one VNet entry."
+CUSTOMER_VNET_NAMES=($(get_customer_vnet_names))
+if [[ ${#CUSTOMER_VNET_NAMES[@]} -eq 0 ]]; then
+  fail "No customer VNets defined. Set CUSTOMER_VNET_NAME_1 and related fields in scripts/isv.env.sh."
 fi
 
-for item in "${VNET_ITEMS[@]}"; do
-  parsed=$(parse_vnet_entry "$item")
-  customer_sub="${parsed%%|*}"
-  rest="${parsed#*|}"
-  customer_rg="${rest%%|*}"
-  customer_vnet="${rest#*|}"
-
-  peering_name="${ISV_PEERING_NAME_PREFIX}-${customer_vnet}"
+for customer_vnet in "${CUSTOMER_VNET_NAMES[@]}"; do
+  peering_name="${ISV_PEERING_NAME_PREFIX}-${ISV_VNET_NAME}-to-${customer_vnet}"
 
   info "Deleting ISV peering: $peering_name"
   az network vnet peering delete \

@@ -41,7 +41,8 @@ ISV_RESOURCE_GROUP="rg-isv-hub"
 ISV_VNET_NAME="vnet-isv-hub"
 CUSTOMER_SUBSCRIPTION_ID="..."
 CUSTOMER_RESOURCE_GROUP="rg-customer-spoke"
-CUSTOMER_VNETS="vnet-customer-spoke"
+CUSTOMER_VNET_NAME_1="vnet-customer-spoke-1"
+CUSTOMER_VNET_NAME_2="vnet-customer-spoke-2"
 ```
 
 ## Deployment Options (CLI Only)
@@ -54,6 +55,7 @@ Use the SPN-first scripts if you want automation with service principals:
 - `scripts/customer-register-isv-spn.sh` (Register ISV SPN in customer tenant, assign role)
 - `scripts/isv-peering.sh` (ISV creates peering to customer VNets)
 - `scripts/customer-peering.sh` (Customer creates peering to ISV VNets)
+- `scripts/customer-peering.sh` can optionally create a customer-side UDR and attach it to all subnets in each customer VNet.
 - `scripts/isv-cleanup.sh` (ISV cleanup of roles, SPN, and optional RG/VNet)
 - `scripts/customer-cleanup.sh` (Customer cleanup of roles, SPN, and optional RG/VNet)
 - `scripts/isv-peering-delete.sh` (Delete ISV-side peerings)
@@ -68,12 +70,13 @@ The user must have `vnet-peer` role (or equivalent) in each tenant’s RG; Owner
 1) ISV admin runs:
 - Fill `scripts/isv.env.sh` (leave `ISV_APP_ID` and `ISV_APP_SECRET` empty)
 - Run `scripts/isv-setup.sh` to create the ISV app/SPN
-- Copy the output values and paste them into `scripts/isv.env.sh`
+- The script auto-updates `scripts/isv.env.sh` with the generated values
 
 2) Customer admin runs:
 - Fill `scripts/customer.env.sh` (leave `CUSTOMER_APP_ID` and `CUSTOMER_APP_SECRET` empty)
+  - Add one or more `CUSTOMER_VNET_NAME_1`, `CUSTOMER_VNET_NAME_2`, etc. with address space/subnet values
 - Run `scripts/customer-setup.sh` to create the customer app/SPN
-- Copy the output values and paste them into `scripts/customer.env.sh`
+- The script auto-updates `scripts/customer.env.sh` with the generated values
 
 3) Cross-tenant registration:
 - Run `scripts/isv-register-customer-spn.sh` as **ISV tenant admin** (Owner/Contributor + User Access Administrator + App Admin) in the **ISV tenant**.
@@ -83,15 +86,27 @@ The user must have `vnet-peer` role (or equivalent) in each tenant’s RG; Owner
 - Run `scripts/isv-peering.sh`
 - Run `scripts/customer-peering.sh`
 
-Example multi-VNet input format for peering scripts (simple):
+Example customer VNet inputs (numbered, in `scripts/customer.env.sh`):
 ```
-CUSTOMER_VNETS="vnet-cust-1,vnet-cust-2"
-ISV_VNETS="vnet-isv-hub"
+CUSTOMER_VNET_NAME_1="vnet-cust-1"
+CUSTOMER_VNET_ADDRESS_SPACE_1="10.100.0.0/16"
+CUSTOMER_SUBNET_NAME_1="default"
+CUSTOMER_SUBNET_PREFIX_1="10.100.1.0/24"
+
+CUSTOMER_VNET_NAME_2="vnet-cust-2"
+CUSTOMER_VNET_ADDRESS_SPACE_2="10.101.0.0/16"
+CUSTOMER_SUBNET_NAME_2="default"
+CUSTOMER_SUBNET_PREFIX_2="10.101.1.0/24"
 ```
-Advanced format (when VNets are in different RGs or subscriptions):
+Optional customer UDR (set in `scripts/customer.env.sh`).
+When enabled, routes are created for OTHER customer VNets listed by `CUSTOMER_VNET_NAME_*`
+(no default 0.0.0.0/0).
 ```
-CUSTOMER_VNETS="sub-b-1111:rg-cust-1/vnet-cust-1,sub-b-2222:rg-cust-2/vnet-cust-2"
-ISV_VNETS="sub-a-1111:rg-isv-hub/vnet-isv-hub"
+CUSTOMER_UDR_ENABLE="true"
+CUSTOMER_UDR_NEXT_HOP_IP="10.0.1.4"
+CUSTOMER_VNET_NAME_1="vnet-a"
+CUSTOMER_VNET_NAME_2="vnet-b"
+CUSTOMER_VNET_NAME_3="vnet-c"
 ```
 
 ## Prerequisites

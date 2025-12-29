@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # Customer peering script (SPN login).
-# Creates peering from the customer VNet(s) to the ISV VNet(s).
+# Creates peering from each customer VNet (CUSTOMER_VNET_NAME_*) to the ISV VNet(s).
 #
 # ISV_VNETS format:
 #   Simple: "vnet-isv-hub,vnet-isv-2" (uses ISV_RESOURCE_GROUP and ISV_SUBSCRIPTION_ID)
@@ -23,6 +23,7 @@ source "$ENV_FILE"
 
 # Values are loaded from scripts/customer.env.sh
 CUSTOMER_PEERING_NAME_PREFIX="peer-customer-to-isv"
+CUSTOMER_UDR_NAME_PREFIX="udr-to-isv-lb"
 
 # Peering options
 ALLOW_VNET_ACCESS="true"
@@ -56,11 +57,31 @@ require_value "CUSTOMER_SUBSCRIPTION_ID" "$CUSTOMER_SUBSCRIPTION_ID"
 require_value "CUSTOMER_APP_ID" "$CUSTOMER_APP_ID"
 require_value "CUSTOMER_APP_SECRET" "$CUSTOMER_APP_SECRET"
 require_value "CUSTOMER_RESOURCE_GROUP" "$CUSTOMER_RESOURCE_GROUP"
-require_value "CUSTOMER_VNET_NAME" "$CUSTOMER_VNET_NAME"
+require_value "CUSTOMER_LOCATION" "$CUSTOMER_LOCATION"
 require_value "ISV_TENANT_ID" "$ISV_TENANT_ID"
 require_value "ISV_SUBSCRIPTION_ID" "$ISV_SUBSCRIPTION_ID"
 require_value "ISV_RESOURCE_GROUP" "$ISV_RESOURCE_GROUP"
 require_value "ISV_VNETS" "$ISV_VNETS"
+if [[ "${CUSTOMER_UDR_ENABLE:-false}" == "true" ]]; then
+  require_value "CUSTOMER_UDR_NEXT_HOP_IP" "$CUSTOMER_UDR_NEXT_HOP_IP"
+fi
+
+get_customer_vnet_names() {
+  local names=()
+  local var
+  for var in ${!CUSTOMER_VNET_NAME_@}; do
+    local name="${!var}"
+    if [[ -n "$name" ]]; then
+      names+=("$name")
+    fi
+  done
+  echo "${names[@]}"
+}
+
+CUSTOMER_VNET_NAMES=($(get_customer_vnet_names))
+if [[ ${#CUSTOMER_VNET_NAMES[@]} -eq 0 ]]; then
+  fail "No customer VNets defined. Set CUSTOMER_VNET_NAME_1 and related fields in scripts/customer.env.sh."
+fi
 
 parse_vnet_entry() {
   local entry="$1"
@@ -90,6 +111,7 @@ parse_vnet_entry() {
   echo "${sub_id}|${rg}|${vnet}"
 }
 
+
 ###############################################################################
 # LOGIN AND CONTEXT
 ###############################################################################
@@ -108,45 +130,96 @@ az account set --subscription "$CUSTOMER_SUBSCRIPTION_ID"
 # CREATE PEERINGS
 ###############################################################################
 
-CUSTOMER_VNET_ID=$(az network vnet show \
-  --resource-group "$CUSTOMER_RESOURCE_GROUP" \
-  --name "$CUSTOMER_VNET_NAME" \
-  --query id -o tsv)
-
 IFS=',' read -r -a VNET_ITEMS <<< "$ISV_VNETS"
 if [[ ${#VNET_ITEMS[@]} -eq 0 ]]; then
   fail "ISV_VNETS is empty. Provide at least one VNet entry."
 fi
 
-for item in "${VNET_ITEMS[@]}"; do
-  parsed=$(parse_vnet_entry "$item")
-  isv_sub="${parsed%%|*}"
-  rest="${parsed#*|}"
-  isv_rg="${rest%%|*}"
-  isv_vnet="${rest#*|}"
+for customer_vnet in "${CUSTOMER_VNET_NAMES[@]}"; do
+  for item in "${VNET_ITEMS[@]}"; do
+    parsed=$(parse_vnet_entry "$item")
+    isv_sub="${parsed%%|*}"
+    rest="${parsed#*|}"
+    isv_rg="${rest%%|*}"
+    isv_vnet="${rest#*|}"
 
-  remote_id="/subscriptions/${isv_sub}/resourceGroups/${isv_rg}/providers/Microsoft.Network/virtualNetworks/${isv_vnet}"
-  peering_name="${CUSTOMER_PEERING_NAME_PREFIX}-${isv_vnet}"
+    remote_id="/subscriptions/${isv_sub}/resourceGroups/${isv_rg}/providers/Microsoft.Network/virtualNetworks/${isv_vnet}"
+    peering_name="${CUSTOMER_PEERING_NAME_PREFIX}-${customer_vnet}-to-${isv_vnet}"
 
-  info "Creating customer peering: $peering_name -> $remote_id"
-  if ! output=$(az network vnet peering create \
-    --name "$peering_name" \
-    --resource-group "$CUSTOMER_RESOURCE_GROUP" \
-    --vnet-name "$CUSTOMER_VNET_NAME" \
-    --remote-vnet "$remote_id" \
-    --allow-vnet-access "$ALLOW_VNET_ACCESS" \
-    --allow-forwarded-traffic "$ALLOW_FORWARDED_TRAFFIC" \
-    --allow-gateway-transit "$ALLOW_GATEWAY_TRANSIT" \
-    --use-remote-gateways "$USE_REMOTE_GATEWAYS" 2>&1); then
-    echo "$output" >&2
-    if echo "$output" | grep -E -q "missing service principal|AADSTS7000229"; then
-      info "Customer SPN likely not registered in ISV tenant."
-      info "Ask ISV admin to run scripts/isv-register-customer-spn.sh"
-      info "Or use admin consent URL:"
-      info "https://login.microsoftonline.com/${ISV_TENANT_ID}/adminconsent?client_id=${CUSTOMER_APP_ID}"
+    info "Creating customer peering: $peering_name -> $remote_id"
+    if ! output=$(az network vnet peering create \
+      --name "$peering_name" \
+      --resource-group "$CUSTOMER_RESOURCE_GROUP" \
+      --vnet-name "$customer_vnet" \
+      --remote-vnet "$remote_id" \
+      --allow-vnet-access "$ALLOW_VNET_ACCESS" \
+      --allow-forwarded-traffic "$ALLOW_FORWARDED_TRAFFIC" \
+      --allow-gateway-transit "$ALLOW_GATEWAY_TRANSIT" \
+      --use-remote-gateways "$USE_REMOTE_GATEWAYS" 2>&1); then
+      echo "$output" >&2
+      if echo "$output" | grep -E -q "missing service principal|AADSTS7000229"; then
+        info "Customer SPN likely not registered in ISV tenant."
+        info "Ask ISV admin to run scripts/isv-register-customer-spn.sh"
+        info "Or use admin consent URL:"
+        info "https://login.microsoftonline.com/${ISV_TENANT_ID}/adminconsent?client_id=${CUSTOMER_APP_ID}"
+      fi
+      exit 1
     fi
-    exit 1
-  fi
+  done
 done
+
+if [[ "${CUSTOMER_UDR_ENABLE:-false}" == "true" ]]; then
+  for customer_vnet in "${CUSTOMER_VNET_NAMES[@]}"; do
+    udr_name="${CUSTOMER_UDR_NAME_PREFIX}-${customer_vnet}"
+    info "Creating route table: $udr_name"
+    az network route-table create \
+      --name "$udr_name" \
+      --resource-group "$CUSTOMER_RESOURCE_GROUP" \
+      --location "$CUSTOMER_LOCATION" >/dev/null
+
+    info "Creating routes from $customer_vnet to other customer VNets (next hop: $CUSTOMER_UDR_NEXT_HOP_IP)"
+    route_index=1
+    seen_prefixes=""
+
+    for other_vnet in "${CUSTOMER_VNET_NAMES[@]}"; do
+      if [[ "$other_vnet" == "$customer_vnet" ]]; then
+        continue
+      fi
+
+      for prefix in $(az network vnet show \
+        --resource-group "$CUSTOMER_RESOURCE_GROUP" \
+        --name "$other_vnet" \
+        --subscription "$CUSTOMER_SUBSCRIPTION_ID" \
+        --query "addressSpace.addressPrefixes[]" -o tsv); do
+        case " $seen_prefixes " in
+          *" $prefix "*)
+            continue
+            ;;
+        esac
+        az network route-table route create \
+          --resource-group "$CUSTOMER_RESOURCE_GROUP" \
+          --route-table-name "$udr_name" \
+          --name "to-customer-${route_index}" \
+          --address-prefix "$prefix" \
+          --next-hop-type "VirtualAppliance" \
+          --next-hop-ip-address "$CUSTOMER_UDR_NEXT_HOP_IP" >/dev/null
+        seen_prefixes="${seen_prefixes} ${prefix}"
+        route_index=$((route_index + 1))
+      done
+    done
+
+    info "Associating route table to all subnets in $customer_vnet"
+    for subnet in $(az network vnet subnet list \
+      --resource-group "$CUSTOMER_RESOURCE_GROUP" \
+      --vnet-name "$customer_vnet" \
+      --query "[].name" -o tsv); do
+      az network vnet subnet update \
+        --resource-group "$CUSTOMER_RESOURCE_GROUP" \
+        --vnet-name "$customer_vnet" \
+        --name "$subnet" \
+        --route-table "$udr_name" >/dev/null
+    done
+  done
+fi
 
 info "Customer peering creation complete."
