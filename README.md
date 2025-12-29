@@ -113,7 +113,6 @@ Cross-Tenant-VNet-Peering/
 │   ├── PREREQUISITES.md            # Setup requirements and preparation
 │   └── EXAMPLES.md                 # Usage scenarios and examples
 ├── scripts/                        # Automation scripts (CLI only)
-│   ├── create-cross-tenant-vnet-peering.sh   # User-based flow (interactive)
 │   ├── isv.env.sh                  # ISV config (local, not committed)
 │   ├── customer.env.sh             # Customer config (local, not committed)
 │   ├── isv-setup.sh                # ISV setup (SPN-first)
@@ -122,6 +121,11 @@ Cross-Tenant-VNet-Peering/
 │   ├── customer-register-isv-spn.sh # Customer registration-only
 │   ├── isv-peering.sh              # ISV peering (SPN-first)
 │   ├── customer-peering.sh         # Customer peering (SPN-first)
+│   ├── isv-peering-delete.sh       # Delete ISV-side peerings
+│   ├── customer-peering-delete.sh  # Delete customer-side peerings
+│   ├── isv-cleanup.sh              # ISV cleanup (roles/SPN/RG)
+│   ├── customer-cleanup.sh         # Customer cleanup (roles/SPN/RG)
+│   ├── create-cross-tenant-vnet-peering.sh   # User-based flow (interactive)
 │   └── config-template.sh          # Optional config template
 ├── CHANGELOG.md
 ├── CONTRIBUTING.md
