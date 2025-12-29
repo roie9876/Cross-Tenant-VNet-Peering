@@ -1,463 +1,99 @@
-# Cross-Tenant VNet Peering Automation
+# Cross-Tenant VNet Peering Automation (Azure CLI)
 
-This repository provides **two deployment methods** for creating VNet peering between Azure tenants using custom RBAC roles with least-privilege access.
+This repository automates cross-tenant VNet peering using Azure CLI and least-privilege RBAC. The focus is CLI-only: no portal/ARM/Bicep workflow.
 
-## 🎯 Choose Your Deployment Method
+## What This Repo Does
 
-| Method | Best For | Complexity | Customer-Friendly |
-|--------|----------|------------|-------------------|
-| **🔘 ARM/Bicep Templates** | ISVs, Enterprise, GUI users | ⭐ Easy | ✅ Yes - One-click button |
-| **⚙️ Bash Script** | DevOps, Automation, CI/CD | ⭐⭐ Medium | ❌ Requires CLI knowledge |
+- Creates bidirectional VNet peering across two Azure tenants.
+- Uses a custom `vnet-peer` role scoped to resource groups.
+- Supports both a user-based flow and an SPN-first flow.
+- Validates address space overlap and peering status.
 
-### 🔘 Option 1: ARM/Bicep Templates (Recommended for ISVs)
+## Deployment Options (CLI Only)
 
-**Perfect for:**
-- ISVs connecting customers to their service
-- Customers who prefer Azure Portal (no CLI)
-- Enterprise deployments requiring approval workflows
-- Documented, auditable deployments
+### Option 1: User-Based Script (Interactive)
+Use `scripts/create-cross-tenant-vnet-peering.sh` if you want a single script that logs into both tenants with a user account and creates peerings.
 
-**Advantages:**
-- ✅ One-click "Deploy to Azure" button
-- ✅ GUI-based deployment in Azure Portal
-- ✅ Built-in validation before deployment
-- ✅ What-if preview (see changes before applying)
-- ✅ Professional customer experience
-- ✅ Deployment history and audit trail
+### Option 2: SPN-First Automation (Recommended for CI/CD)
+Use the new SPN-first scripts if you want automation with service principals:
+- `scripts/isv-setup.sh` (ISV app/SPN + role + optional RG/VNet)
+- `scripts/customer-setup.sh` (Customer app/SPN + role + optional RG/VNet, supports multiple RG scopes)
+- `scripts/isv-peering.sh` (ISV creates peering to customer VNets)
+- `scripts/customer-peering.sh` (Customer creates peering to ISV VNets)
 
-**See:** [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for full guide
+## Quick Start (SPN-First)
 
-### ⚙️ Option 2: Bash Script (For DevOps/Automation)
+1) ISV admin runs:
+- Configure `scripts/isv-setup.sh`
+- Run it and copy `ISV_APP_ID` and `ISV_APP_SECRET`
 
-**Perfect for:**
-- DevOps teams automating deployments
-- CI/CD pipelines
-- Internal IT operations
-- Users comfortable with Azure CLI
+2) Customer admin runs:
+- Configure `scripts/customer-setup.sh`
+- Run it and copy `CUSTOMER_APP_ID` and `CUSTOMER_APP_SECRET`
 
-**Advantages:**
-- ✅ Fully automated - no manual steps
-- ✅ Pre-flight validation checks
-- ✅ Colored output and progress indicators
-- ✅ Address space overlap detection
-- ✅ Automatic status verification
-- ✅ Easy to integrate in automation workflows
+3) Cross-tenant registration:
+- Re-run each setup script with the other tenant's App ID set
 
-**See:** [scripts/README.md](scripts/README.md) for full guide
+4) Create peerings:
+- Configure and run `scripts/isv-peering.sh`
+- Configure and run `scripts/customer-peering.sh`
 
----
+## Prerequisites
 
-## 📋 Common Features (Both Methods)
+- Azure CLI installed
+- Two tenants with active subscriptions
+- VNets already exist (or let the setup scripts create them)
+- Non-overlapping address spaces
+- Admin permissions in each tenant to create app registrations, SPNs, and role assignments
 
-- ✅ **Least Privilege Access:** Custom RBAC role with minimal permissions
-- ✅ **Bidirectional Peering:** Creates both sides automatically
-- ✅ **Address Space Validation:** Prevents overlapping IP ranges
-- ✅ **Cross-Tenant Support:** Works across different Azure AD tenants
-- ✅ **Advanced Options:** Gateway transit, forwarded traffic, etc.
+See `docs/PREREQUISITES.md` for details.
 
-## 🚀 Quick Start
-
-### Method 1: Deploy to Azure Button (Bicep/ARM Template)
-
-**For Customers:** Click the button to deploy in your Azure Portal
-
-[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Froie9876%2FCross-Tenant-VNet-Peering%2Fmain%2Ftemplates%2Fdeploy-vnet-peering.json)
-
-**What happens:**
-1. Opens Azure Portal (you authenticate with your account)
-2. Fill parameters: your VNet, resource group, remote VNet resource ID
-3. Click Deploy → Peering created **in your tenant only**
-
-⚠️ **Important:** 
-- **Prerequisites:** You need `vnet-peer` custom role assigned (one-time setup by your admin)
-- **Two-sided deployment:** This creates YOUR side only. ISV must deploy their side separately.
-- **No admin needed:** You don't need Owner/Contributor, just the custom role!
-
-❓ **New to this?** Read [Why Custom Role and Two-Sided Deployment?](docs/WHY-CUSTOM-ROLE-AND-TWO-SIDED.md)
-
-**For ISVs:** Share this button with customers. See [docs/ISV-CUSTOMER-GUIDE.md](docs/ISV-CUSTOMER-GUIDE.md) for email templates and workflow.
-
-**Full Guide:** [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
-
----
-
-### Method 2: Bash Script (Automated CLI)
-
-**For DevOps/Automation Teams**
-
-#### 1. Review Prerequisites
-Read **[docs/PREREQUISITES.md](docs/PREREQUISITES.md)** to understand:
-- Required tools and installations
-- Azure environment requirements
-- Custom RBAC role setup
-- User account or Service Principal configuration
-
-#### 2. Set Up Custom RBAC Roles
-
-Create the `vnet-peer` custom role in **both** tenants (required for both methods):
-
-```bash
-# ISV Tenant
-az login --tenant <ISV_ID>
-az account set --subscription <SUBSCRIPTION_A_ID>
-
-# Edit templates/vnet-peer-role.json and update assignableScopes
-az role definition create --role-definition templates/vnet-peer-role.json
-
-az role assignment create \
-  --assignee <YOUR_EMAIL> \
-  --role "vnet-peer" \
-  --scope "/subscriptions/<SUBSCRIPTION_A_ID>/resourceGroups/<RESOURCE_GROUP_A>"
-
-# Customer Tenant (repeat with Customer Tenant values)
-az login --tenant <CUSTOMER_ID>
-az account set --subscription <SUBSCRIPTION_B_ID>
-
-# Update templates/vnet-peer-role.json with Customer Tenant subscription and resource group
-az role definition create --role-definition templates/vnet-peer-role.json
-
-az role assignment create \
-  --assignee <YOUR_EMAIL> \
-  --role "vnet-peer" \
-  --scope "/subscriptions/<SUBSCRIPTION_B_ID>/resourceGroups/<RESOURCE_GROUP_B>"
-```
-
-#### 3. Configure the Bash Script
-
-Edit `scripts/create-cross-tenant-vnet-peering.sh` and update the configuration section:
-
-```bash
-# ISV Tenant Configuration
-ISV_ID="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-ISV_SUBSCRIPTION_ID="your-subscription-a-id"
-ISV_RESOURCE_GROUP="your-resource-group-a"
-ISV_VNET_NAME="your-vnet-a-name"
-ISV_PEERING_NAME="peer-tenantA-to-tenantB"
-
-# Customer Tenant Configuration
-CUSTOMER_ID="yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy"
-CUSTOMER_SUBSCRIPTION_ID="your-subscription-b-id"
-CUSTOMER_RESOURCE_GROUP="your-resource-group-b"
-CUSTOMER_VNET_NAME="your-vnet-b-name"
-CUSTOMER_PEERING_NAME="peer-tenantB-to-tenantA"
-
-# Peering Options
-ALLOW_VNET_ACCESS="true"
-ALLOW_FORWARDED_TRAFFIC="false"
-ALLOW_GATEWAY_TRANSIT_A="false"
-USE_REMOTE_GATEWAYS_A="false"
-ALLOW_GATEWAY_TRANSIT_B="false"
-USE_REMOTE_GATEWAYS_B="false"
-```
-
-#### 4. Run the Bash Script
-
-```bash
-# Make the script executable
-chmod +x scripts/create-cross-tenant-vnet-peering.sh
-
-# Run the script
-./scripts/create-cross-tenant-vnet-peering.sh
-```
-
-The script will:
-1. Validate prerequisites and configuration
-2. Gather VNet information from both tenants
-3. Check for address space overlap
-4. Display a summary and request confirmation
-5. Create peering connections in both directions
-6. Verify the final peering status
-
-**Full Guide:** [scripts/README.md](scripts/README.md)
-
----
-
-## 🤔 Which Method Should I Use?
-
-**📊 See detailed comparison:** [DEPLOYMENT-METHODS-COMPARISON.md](DEPLOYMENT-METHODS-COMPARISON.md)
-
-### Use ARM/Bicep Templates (Method 1) if:
-- ✅ You're an ISV connecting customers to your service
-- ✅ Your customers prefer GUI over CLI
-- ✅ You want professional "Deploy to Azure" button experience
-- ✅ You need deployment approval workflows
-- ✅ You want built-in what-if validation
-- ✅ Customers will deploy their side independently
-
-### Use Bash Script (Method 2) if:
-- ✅ You're a DevOps engineer automating deployments
-- ✅ You control both Azure tenants
-- ✅ You want to integrate into CI/CD pipelines
-- ✅ You prefer command-line automation
-- ✅ You want a single script to deploy both sides
-- ✅ You're comfortable with Azure CLI
-
-### Can I use both?
-**Yes!** Many ISVs use:
-- **Templates for customers** (easy button-click deployment)
-- **Bash script for their own side** (automated ISV environment setup)
-
-This is actually the recommended hybrid approach.
-
-## 📁 Repository Structure
+## Repository Structure
 
 ```
 Cross-Tenant-VNet-Peering/
-├── docs/                           # 📚 Documentation
+├── docs/                           # Documentation
 │   ├── README.md                   # Documentation guide and navigation
 │   ├── Cross-Tenant-VNet-Peering-Guide.md    # Complete manual implementation guide
 │   ├── PREREQUISITES.md            # Setup requirements and preparation
-│   ├── DEPLOYMENT.md               # 🔘 ARM/Bicep template deployment guide
-│   ├── ISV-CUSTOMER-GUIDE.md       # ISV workflow and customer email templates
 │   └── EXAMPLES.md                 # Usage scenarios and examples
-├── templates/                      # 🔘 ARM/Bicep templates (Method 1)
-│   ├── README.md                   # Templates documentation
-│   ├── deploy-vnet-peering.bicep   # Bicep template source
-│   ├── deploy-vnet-peering.json    # Compiled ARM template (for Deploy to Azure button)
-│   ├── deploy-vnet-peering.parameters.json   # Parameters file example
-│   ├── createUiDefinition.json     # Azure Portal UI definition
-│   └── vnet-peer-role.json         # Custom RBAC role definition
-├── scripts/                        # ⚙️ Automation scripts (Method 2)
+├── scripts/                        # Automation scripts (CLI only)
 │   ├── README.md                   # Scripts documentation
-│   ├── create-cross-tenant-vnet-peering.sh   # Main bash script
-│   └── config-template.sh          # Configuration template
-├── .github/                        # GitHub configuration
-│   ├── workflows/                  # CI/CD workflows
-│   ├── ISSUE_TEMPLATE/            # Issue templates
-│   └── PULL_REQUEST_TEMPLATE.md   # PR template
-├── DEPLOY-BUTTON-REFERENCE.md      # 🚀 Quick reference for Deploy to Azure button
-├── README.md                       # This file - main entry point
-├── LICENSE                         # MIT License
-├── CONTRIBUTING.md                 # Contribution guidelines
-├── SECURITY.md                     # Security policy
-├── CHANGELOG.md                    # Version history
-└── .gitignore                      # Excluded files
-└── CHANGELOG.md                    # Version history
-
-## 🔑 Key Features
-
-### Security Best Practices (Both Methods)
-- **Least Privilege Access:** Uses custom RBAC role with only required permissions
-- **Resource Group Scoped:** Roles limited to specific resource groups, not entire subscriptions
-- **No Owner/Contributor Required:** Eliminates need for excessive permissions
-- **Audit Trail:** All deployments logged in Azure Activity Log
-
-### Method 1: ARM/Bicep Templates Features
-- **One-Click Deployment:** Deploy to Azure button for customers
-- **GUI-Based:** No CLI installation required
-- **Built-in Validation:** Azure validates before deploying
-- **What-If Preview:** See changes before applying
-- **Portal UI Definition:** Custom form with help text and validation
-- **Deployment History:** Full audit trail in Azure Portal
-
-### Method 2: Bash Script Features
-- **Full Automation:** Single command deploys both sides
-- **Pre-flight Checks:** Validates Azure CLI, config, prerequisites
-- **Address Space Validation:** Prevents overlapping IP ranges
-- **Interactive Confirmation:** Shows summary before changes
-- **Status Verification:** Automatically checks peering state
-- **Colored Output:** Easy-to-read progress indicators
-- **CI/CD Ready:** Easy to integrate into pipelines
-
-### Advanced Options (Both Methods)
-- Gateway transit for VPN connectivity
-- Forwarded traffic for Network Virtual Appliances (NVA)
-- Configurable peering names
-- Support for hub-and-spoke, multi-region scenarios
-
-## 📖 Documentation
-
-### Deployment Methods Documentation
-
-| Document | For Method | Description |
-|----------|-----------|-------------|
-| [📋 PREREQUISITES.md](docs/PREREQUISITES.md) | **Both** | Setup requirements, RBAC roles, preparation steps |
-| [🔘 DEPLOYMENT.md](docs/DEPLOYMENT.md) | **Method 1** | ARM/Bicep template deployment guide |
-| [⚙️ scripts/README.md](scripts/README.md) | **Method 2** | Bash script usage and automation guide |
-| [🚀 DEPLOY-BUTTON-REFERENCE.md](DEPLOY-BUTTON-REFERENCE.md) | **Method 1** | Quick reference for Deploy to Azure button |
-| [👥 ISV-CUSTOMER-GUIDE.md](docs/ISV-CUSTOMER-GUIDE.md) | **Method 1** | ISV workflow and customer email templates |
-
-### Additional Documentation
-
-| Document | Description |
-|----------|-------------|
-| [📚 docs/README.md](docs/README.md) | Documentation navigation guide |
-| [❓ WHY-CUSTOM-ROLE-AND-TWO-SIDED.md](docs/WHY-CUSTOM-ROLE-AND-TWO-SIDED.md) | **Why custom role? Why two deployments? Explained!** |
-| [📖 Cross-Tenant-VNet-Peering-Guide.md](docs/Cross-Tenant-VNet-Peering-Guide.md) | Complete manual implementation guide |
-| [💡 EXAMPLES.md](docs/EXAMPLES.md) | Real-world usage scenarios |
-
-### Important Considerations
-
-#### ⚠️ Service Principal Limitation
-**Service Principals CANNOT create the initial cross-tenant VNet peering** due to Azure's authorization model. You must use a **User Account** that has access to both tenants.
-
-Service Principals can be used for:
-- ✅ Managing existing peerings (update, delete, sync)
-- ✅ Creating and managing route tables (UDRs)
-- ✅ Updating subnet configurations
-
-#### Address Space Requirements
-VNets must have **non-overlapping** IP address ranges:
-
-✅ **Valid:**
-```
-ISV Tenant: 192.168.0.0/16
-Customer Tenant: 10.0.0.0/16
+│   ├── create-cross-tenant-vnet-peering.sh   # User-based flow (interactive)
+│   ├── isv-setup.sh                # ISV setup (SPN-first)
+│   ├── customer-setup.sh           # Customer setup (SPN-first)
+│   ├── isv-peering.sh              # ISV peering (SPN-first)
+│   ├── customer-peering.sh         # Customer peering (SPN-first)
+│   └── config-template.sh          # Optional config template
+├── CHANGELOG.md
+├── CONTRIBUTING.md
+├── LICENSE
+├── README.md
+└── SECURITY.md
 ```
 
-❌ **Invalid:**
-```
-ISV Tenant: 10.0.0.0/16
-Customer Tenant: 10.1.0.0/16  (both in 10.x.x.x range)
-```
+## Verification
 
-#### Bidirectional Peering
-Cross-tenant peering requires **both sides** to be created separately:
-1. Peering from ISV Tenant to Customer Tenant
-2. Peering from Customer Tenant to ISV Tenant
-
-Both must exist for the connection to be established.
-
-## 🔍 Verification
-
-After running the script, verify the peering is working:
-
-### Check Peering Status
+Check peering status after deployment:
 
 ```bash
-# ISV Tenant
-az network vnet peering list \
-  --resource-group <RG_A> \
-  --vnet-name <VNET_A> \
-  --output table
+# ISV
+az network vnet peering list --resource-group <RG_A> --vnet-name <VNET_A> -o table
 
-# Customer Tenant
-az network vnet peering list \
-  --resource-group <RG_B> \
-  --vnet-name <VNET_B> \
-  --output table
+# Customer
+az network vnet peering list --resource-group <RG_B> --vnet-name <VNET_B> -o table
 ```
 
-**Expected Output:**
-- PeeringState: `Connected`
-- SyncLevel: `FullyInSync`
-- ProvisioningState: `Succeeded`
+Expected:
+- `PeeringState` = `Connected`
+- `SyncLevel` = `FullyInSync`
 
-### Test Connectivity
+## Support
 
-Deploy test VMs in each VNet and verify network connectivity:
+- `docs/PREREQUISITES.md`
+- `docs/Cross-Tenant-VNet-Peering-Guide.md`
+- `docs/EXAMPLES.md`
 
-```bash
-# From VM in ISV Tenant
-ping <IP_ADDRESS_IN_CUSTOMER>
+## License
 
-# From VM in Customer Tenant
-ping <IP_ADDRESS_IN_ISV>
-```
-
-## 🛠️ Troubleshooting
-
-### Common Issues
-
-#### Peering State: "Initiated"
-**Cause:** Only one side of the peering has been created.
-**Solution:** Ensure both ISV Tenant and Customer Tenant peering connections are created.
-
-#### "User not authorized"
-**Cause:** Missing `vnet-peer` role assignment.
-**Solution:** Verify role assignments with:
-```bash
-az role assignment list --assignee <YOUR_EMAIL> --all
-```
-
-#### Address Space Overlap
-**Cause:** VNets have overlapping IP ranges.
-**Solution:** Modify VNet address spaces before creating peering.
-
-#### MFA/Authentication Issues
-**Cause:** Token expired or MFA required.
-**Solution:** The script uses device code authentication. Complete the browser-based authentication when prompted.
-
-For more troubleshooting steps, see [docs/Cross-Tenant-VNet-Peering-Guide.md](docs/Cross-Tenant-VNet-Peering-Guide.md#troubleshooting).
-
-## 📊 Custom RBAC Role Permissions
-
-The `vnet-peer` role includes these permissions:
-
-| Permission | Purpose |
-|------------|---------|
-| `Microsoft.Network/virtualNetworks/*` | Read and write VNet configurations |
-| `Microsoft.Network/virtualNetworks/virtualNetworkPeerings/*` | Manage peering connections |
-| `Microsoft.Network/virtualNetworks/peer/action` | **Critical:** Authorize cross-tenant peering |
-| `Microsoft.Network/routeTables/*` | Manage User Defined Routes (UDR) |
-| `Microsoft.Network/networkSecurityGroups/read` | Read NSG configurations |
-| `Microsoft.Network/networkSecurityGroups/join/action` | Associate NSG with subnets |
-
-This is significantly more restrictive than Owner or Contributor roles.
-
-## 🔗 Architecture
-
-```
-ISV Tenant (Your Organization)           Customer Tenant (Partner Organization)
-Subscription: xxx-xxx-xxx              Subscription: yyy-yyy-yyy
-├── Resource Group: rg-tenant-a        ├── Resource Group: rg-tenant-b
-    └── VNet: vnet-tenant-a                └── VNet: vnet-tenant-b
-        Address: 192.168.0.0/16                Address: 10.0.0.0/16
-        │                                      │
-        └──────── Peering Connection ─────────┘
-               (Bidirectional)
-```
-
-## 🔐 Security Considerations
-
-1. **Least Privilege:** Always use custom RBAC roles instead of Owner/Contributor
-2. **Scope Limitation:** Assign roles at resource group level, not subscription level
-3. **Audit Logs:** Enable Azure Activity Logs to monitor peering operations
-4. **Network Security Groups:** Apply NSGs to subnets to control traffic flow
-5. **Regular Review:** Periodically review role assignments and remove unnecessary access
-
-## 📚 Additional Resources
-
-- [Azure VNet Peering Documentation](https://learn.microsoft.com/en-us/azure/virtual-network/virtual-network-peering-overview)
-- [Azure Custom RBAC Roles](https://learn.microsoft.com/en-us/azure/role-based-access-control/custom-roles)
-- [Azure CLI Reference](https://learn.microsoft.com/en-us/cli/azure/network/vnet/peering)
-- [Cross-Tenant Scenarios](https://learn.microsoft.com/en-us/azure/virtual-network/virtual-network-peering-overview#cross-subscription-and-cross-tenant-peering)
-
-## 🤝 Contributing
-
-Found an issue or have a suggestion? Please:
-1. Review the existing documentation
-2. Test your changes thoroughly
-3. Update documentation as needed
-
-## 📝 License
-
-This project is provided as-is for educational and operational purposes.
-
-## 🎯 Choose Your Deployment Method
-
-### Option 1: ARM/Bicep Templates (Recommended for ISV)
-**Best for:** Professional deployments, customer-facing solutions, GUI-based setup
-
-See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for:
-- Deploy to Azure button
-- Azure Portal deployment
-- Built-in validation
-- What-if previews
-
-### Option 2: Bash Script (Recommended for DevOps)
-**Best for:** Automation, CI/CD pipelines, scripted workflows
-
-See [scripts/README.md](scripts/README.md) for setup instructions
-
-## ✅ Checklist Before Deploying
-
-- [ ] Azure CLI installed and configured
-- [ ] Both VNets exist with non-overlapping address spaces
-- [ ] Custom `vnet-peer` role created in both tenants
-- [ ] User account has `vnet-peer` role assigned in both tenants
-- [ ] Configuration values prepared
-- [ ] You have access to authenticate to both tenants
-- [ ] You have reviewed [docs/PREREQUISITES.md](docs/PREREQUISITES.md)
-
-**Ready? Choose your deployment method and establish your cross-tenant VNet peering! 🚀**
+MIT

@@ -221,16 +221,6 @@ az role assignment list --assignee YOUR_EMAIL --all
 - Use the config template approach for team sharing
 - Review the script before running in production
 
-## Alternative: ARM/Bicep Templates
-
-For a GUI-based deployment suitable for customers, see [../templates/](../templates/) and [../docs/DEPLOYMENT.md](../docs/DEPLOYMENT.md).
-
-ARM/Bicep templates provide:
-- No CLI knowledge required
-- Built-in Azure validation
-- Better for ISV/customer scenarios
-- Deploy to Azure button support
-
 ## Support
 
 For issues or questions:
