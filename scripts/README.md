@@ -26,6 +26,27 @@ chmod +x create-cross-tenant-vnet-peering.sh
 ./create-cross-tenant-vnet-peering.sh
 ```
 
+### SPN-first automation (new)
+These scripts automate a service-principal-based flow with cross-tenant consent.
+
+#### `isv-setup.sh`
+Creates the ISV app registration + SPN + secret, optional RG/VNet creation,
+custom `vnet-peer` role, and role assignments. Optionally registers the
+customer SPN in the ISV tenant.
+
+#### `customer-setup.sh`
+Creates the customer app registration + SPN + secret, optional RG/VNet creation,
+custom `vnet-peer` role, and role assignments across one or more RGs. Optionally
+registers the ISV SPN in the customer tenant.
+
+#### `isv-peering.sh`
+Logs in as the ISV SPN and creates peering from the ISV VNet to one or more
+customer VNets.
+
+#### `customer-peering.sh`
+Logs in as the customer SPN and creates peering from the customer VNet to the
+ISV VNet(s).
+
 ### `config-template.sh`
 Template for externalizing configuration values.
 
@@ -53,7 +74,7 @@ Before running these scripts:
 
 2. **Set up RBAC roles:**
    - Create custom `vnet-peer` role in both tenants
-   - Assign role to your user account
+   - Assign role to your user account (for user-based flow)
 
 3. **Prepare your environment:**
    - Ensure both VNets exist
@@ -88,6 +109,18 @@ ALLOW_GATEWAY_TRANSIT_A="false"
 USE_REMOTE_GATEWAYS_A="false"
 ALLOW_GATEWAY_TRANSIT_B="false"
 USE_REMOTE_GATEWAYS_B="false"
+```
+
+For the SPN-first scripts, update the CONFIGURATION sections in:
+- `scripts/isv-setup.sh`
+- `scripts/customer-setup.sh`
+- `scripts/isv-peering.sh`
+- `scripts/customer-peering.sh`
+
+Example multi-VNet input format for peering scripts:
+```
+CUSTOMER_VNETS="sub-b-1111:rg-cust-1/vnet-cust-1,sub-b-2222:rg-cust-2/vnet-cust-2"
+ISV_VNETS="sub-a-1111:rg-isv-hub/vnet-isv-hub"
 ```
 
 ## Script Flow
