@@ -9,13 +9,28 @@ This repository automates cross-tenant VNet peering using Azure CLI and least-pr
 - Supports both a user-based flow and an SPN-first flow.
 - Validates address space overlap and peering status.
 
+## High-Level Flow (SPN-First)
+
+**Actors**
+- ISV Admin: Owner/Contributor + User Access Administrator + App Admin in ISV tenant
+- Customer Admin: Owner/Contributor + User Access Administrator + App Admin in customer tenant
+- ISV SPN: service principal created by ISV Admin
+- Customer SPN: service principal created by Customer Admin
+
+**Steps**
+1) ISV Admin runs `scripts/isv-setup.sh` to create RG/VNet (optional), custom role, ISV SPN + secret.
+2) Customer Admin runs `scripts/customer-setup.sh` to create RG/VNet (optional), custom role, Customer SPN + secret.
+3) Each admin re-runs their setup script with the other side’s App ID to register the external SPN and assign roles.
+4) ISV runs `scripts/isv-peering.sh` using the ISV SPN to create peerings to customer VNets.
+5) Customer runs `scripts/customer-peering.sh` using the Customer SPN to create peerings to ISV VNets.
+
 ## Deployment Options (CLI Only)
 
 ### Option 1: User-Based Script (Interactive)
 Use `scripts/create-cross-tenant-vnet-peering.sh` if you want a single script that logs into both tenants with a user account and creates peerings.
 
 ### Option 2: SPN-First Automation (Recommended for CI/CD)
-Use the new SPN-first scripts if you want automation with service principals:
+Use the SPN-first scripts if you want automation with service principals:
 - `scripts/isv-setup.sh` (ISV app/SPN + role + optional RG/VNet)
 - `scripts/customer-setup.sh` (Customer app/SPN + role + optional RG/VNet, supports multiple RG scopes)
 - `scripts/isv-peering.sh` (ISV creates peering to customer VNets)
@@ -38,6 +53,12 @@ Use the new SPN-first scripts if you want automation with service principals:
 - Configure and run `scripts/isv-peering.sh`
 - Configure and run `scripts/customer-peering.sh`
 
+Example multi-VNet input format for peering scripts:
+```
+CUSTOMER_VNETS="sub-b-1111:rg-cust-1/vnet-cust-1,sub-b-2222:rg-cust-2/vnet-cust-2"
+ISV_VNETS="sub-a-1111:rg-isv-hub/vnet-isv-hub"
+```
+
 ## Prerequisites
 
 - Azure CLI installed
@@ -53,12 +74,10 @@ See `docs/PREREQUISITES.md` for details.
 ```
 Cross-Tenant-VNet-Peering/
 ├── docs/                           # Documentation
-│   ├── README.md                   # Documentation guide and navigation
 │   ├── Cross-Tenant-VNet-Peering-Guide.md    # Complete manual implementation guide
 │   ├── PREREQUISITES.md            # Setup requirements and preparation
 │   └── EXAMPLES.md                 # Usage scenarios and examples
 ├── scripts/                        # Automation scripts (CLI only)
-│   ├── README.md                   # Scripts documentation
 │   ├── create-cross-tenant-vnet-peering.sh   # User-based flow (interactive)
 │   ├── isv-setup.sh                # ISV setup (SPN-first)
 │   ├── customer-setup.sh           # Customer setup (SPN-first)
