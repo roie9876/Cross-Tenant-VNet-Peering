@@ -6,10 +6,28 @@ This repository automates cross-tenant VNet peering using Azure CLI and least-pr
 
 - Creates bidirectional VNet peering across two Azure tenants.
 - Uses a custom `vnet-peer` role scoped to resource groups.
-- Supports both a user-based flow and an SPN-first flow.
+- Supports a single-SPN automation flow (ISV-owned SPN).
 - The user-based script validates address space overlap and peering status.
 
-## High-Level Flow (SPN Automation)
+## Quick Visual Flow (SPN Automation)
+
+```
+ISV Tenant                            Customer Tenant
+-----------                           ----------------
+1) isv-setup.sh
+   - creates ISV SPN
+   - assigns vnet-peer on ISV RG
+   - writes ISV_APP_ID/SECRET
+                  |
+                  | 2) customer-setup.sh
+                  |    - registers ISV SPN in customer tenant
+                  |    - assigns vnet-peer on customer RG
+                  v
+3) isv-peering.sh  --> creates ISV-side peering
+4) customer-peering.sh --> creates customer-side peering
+
+Result: two peerings, status = Connected
+```
 
 **Actors**
 - ISV Admin: Owner/Contributor + User Access Administrator + App Admin in ISV tenant
