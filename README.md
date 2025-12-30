@@ -49,16 +49,88 @@ Fill those files once and reuse across all steps.
 These files are gitignored to keep secrets out of source control.
 If both env files live in the same repo, the setup scripts auto-write the App IDs to the other file so you can avoid copy/paste.
 
-Example (ISV side):
+### Template: `scripts/isv.env.sh`
 ```bash
+#!/bin/bash
+# ISV environment configuration (keep secrets out of git).
+
+# Tenant/subscription
 ISV_TENANT_ID="..."
 ISV_SUBSCRIPTION_ID="..."
+ISV_LOCATION="eastus"
+
+# RG/VNet options
+CREATE_NEW_RG_VNET="true"
 ISV_RESOURCE_GROUP="rg-isv-hub"
 ISV_VNET_NAME="vnet-isv-hub"
+ISV_VNET_ADDRESS_SPACE="10.0.0.0/16"
+ISV_SUBNET_NAME="default"
+ISV_SUBNET_PREFIX="10.0.1.0/24"
+
+# SPN creation
+ISV_APP_DISPLAY_NAME="isv-vnet-peering-spn"
+
+# After setup, filled automatically
+ISV_APP_ID=""
+ISV_APP_SECRET=""
+
+# Customer VNets to peer with (use numbered entries)
+CUSTOMER_TENANT_ID="..."
 CUSTOMER_SUBSCRIPTION_ID="..."
 CUSTOMER_RESOURCE_GROUP="rg-customer-spoke"
 CUSTOMER_VNET_NAME_1="vnet-customer-spoke-1"
 CUSTOMER_VNET_NAME_2="vnet-customer-spoke-2"
+CUSTOMER_VNET_NAME_3=""
+```
+
+### Template: `scripts/customer.env.sh`
+```bash
+#!/bin/bash
+# Customer environment configuration (keep secrets out of git).
+
+# Tenant/subscription
+CUSTOMER_TENANT_ID="..."
+CUSTOMER_SUBSCRIPTION_ID="..."
+CUSTOMER_LOCATION="eastus"
+
+# RG/VNet options
+CREATE_NEW_RG_VNET="true"
+CUSTOMER_RESOURCE_GROUP="rg-customer-spoke"
+
+# VNet 1
+CUSTOMER_VNET_NAME_1="vnet-customer-spoke-1"
+CUSTOMER_VNET_ADDRESS_SPACE_1="10.100.0.0/16"
+CUSTOMER_SUBNET_NAME_1="default"
+CUSTOMER_SUBNET_PREFIX_1="10.100.1.0/24"
+
+# VNet 2 (optional)
+CUSTOMER_VNET_NAME_2="vnet-customer-spoke-2"
+CUSTOMER_VNET_ADDRESS_SPACE_2="10.200.0.0/16"
+CUSTOMER_SUBNET_NAME_2="default"
+CUSTOMER_SUBNET_PREFIX_2="10.200.1.0/24"
+
+# VNet 3 (optional)
+CUSTOMER_VNET_NAME_3=""
+CUSTOMER_VNET_ADDRESS_SPACE_3=""
+CUSTOMER_SUBNET_NAME_3=""
+CUSTOMER_SUBNET_PREFIX_3=""
+
+# ISV app registration (auto-set if both env files are in the same repo)
+ISV_APP_ID=""
+ISV_APP_SECRET=""
+ISV_TENANT_ID="..."
+
+# ISV VNets to peer with (simple format: vnet1,vnet2)
+ISV_SUBSCRIPTION_ID="..."
+ISV_RESOURCE_GROUP="rg-isv-hub"
+ISV_VNETS="vnet-isv-hub"
+
+# Optional UDR for customer-to-customer traffic (via ISV LB)
+CUSTOMER_UDR_ENABLE="false"
+CUSTOMER_UDR_NEXT_HOP_IP=""
+
+# Role assignment scopes (RG level), comma-separated list of RG names.
+CUSTOMER_ROLE_SCOPES="rg-customer-spoke"
 ```
 
 ## Deployment Options (CLI Only)
