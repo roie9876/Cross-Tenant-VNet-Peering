@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# ISV cleanup script for cross-tenant VNet peering resources (SPN-first flow).
+# ISV cleanup script for cross-tenant VNet peering resources (ISV SPN flow).
 # This script can delete:
 #   - ISV SPN (app registration + secret)
 #   - Custom role and role assignments
@@ -81,13 +81,6 @@ if [[ "$DELETE_ROLE_ASSIGNMENTS" == "true" ]]; then
       --scope "$ROLE_SCOPE" >/dev/null 2>&1 || true
   fi
 
-  if [[ -n "$CUSTOMER_APP_ID" ]]; then
-    info "Removing role assignment for customer SPN on $ROLE_SCOPE"
-    az role assignment delete \
-      --assignee "$CUSTOMER_APP_ID" \
-      --role "$ROLE_NAME" \
-      --scope "$ROLE_SCOPE" >/dev/null 2>&1 || true
-  fi
 fi
 
 ###############################################################################

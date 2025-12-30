@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Customer peering script (SPN login).
+# Customer peering script (ISV SPN login).
 # Creates peering from each customer VNet (CUSTOMER_VNET_NAME_*) to the ISV VNet(s).
 #
 # ISV_VNETS format:
@@ -134,24 +134,8 @@ if [[ -z "${ISV_APP_SECRET:-}" ]]; then
   ISV_APP_SECRET="$(read_env_value "$ISV_ENV_FILE" "ISV_APP_SECRET")"
 fi
 
-LOGIN_APP_ID="${CUSTOMER_APP_ID:-}"
-LOGIN_APP_SECRET="${CUSTOMER_APP_SECRET:-}"
-LOGIN_LABEL="customer SPN"
-MISSING_SP_URL="https://login.microsoftonline.com/${ISV_TENANT_ID}/adminconsent?client_id=${CUSTOMER_APP_ID:-}"
-MISSING_SP_MSG="Customer SPN likely not registered in ISV tenant."
-
-if [[ -z "$LOGIN_APP_ID" || -z "$LOGIN_APP_SECRET" ]]; then
-  if [[ -n "${ISV_APP_ID:-}" && -n "${ISV_APP_SECRET:-}" ]]; then
-    LOGIN_APP_ID="$ISV_APP_ID"
-    LOGIN_APP_SECRET="$ISV_APP_SECRET"
-    LOGIN_LABEL="ISV SPN (registered in customer tenant)"
-    MISSING_SP_URL="https://login.microsoftonline.com/${CUSTOMER_TENANT_ID}/adminconsent?client_id=${ISV_APP_ID}"
-    MISSING_SP_MSG="ISV SPN likely not registered in customer tenant."
-  fi
-fi
-
-require_value "LOGIN_APP_ID" "$LOGIN_APP_ID"
-require_value "LOGIN_APP_SECRET" "$LOGIN_APP_SECRET"
+require_value "ISV_APP_ID" "$ISV_APP_ID"
+require_value "ISV_APP_SECRET" "$ISV_APP_SECRET"
 
 
 ###############################################################################
@@ -160,10 +144,10 @@ require_value "LOGIN_APP_SECRET" "$LOGIN_APP_SECRET"
 
 command -v az >/dev/null 2>&1 || fail "Azure CLI (az) is required."
 
-info "Logging in with ${LOGIN_LABEL}"
+info "Logging in with ISV SPN"
 az login --service-principal \
-  --username "$LOGIN_APP_ID" \
-  --password "$LOGIN_APP_SECRET" \
+  --username "$ISV_APP_ID" \
+  --password "$ISV_APP_SECRET" \
   --tenant "$CUSTOMER_TENANT_ID" >/dev/null
 
 az account set --subscription "$CUSTOMER_SUBSCRIPTION_ID"
@@ -200,10 +184,10 @@ for customer_vnet in "${CUSTOMER_VNET_NAMES[@]}"; do
       --use-remote-gateways "$USE_REMOTE_GATEWAYS" 2>&1); then
       echo "$output" >&2
       if echo "$output" | grep -E -q "missing service principal|AADSTS7000229"; then
-        info "$MISSING_SP_MSG"
-        info "Ask the target tenant admin to run the appropriate register script."
+        info "ISV SPN likely not registered in customer tenant."
+        info "Ask the customer admin to re-run scripts/customer-setup.sh."
         info "Or use admin consent URL:"
-        info "$MISSING_SP_URL"
+        info "https://login.microsoftonline.com/${CUSTOMER_TENANT_ID}/adminconsent?client_id=${ISV_APP_ID}"
       fi
       exit 1
     fi

@@ -7,7 +7,6 @@
 #   3) Creates a multi-tenant App Registration + SPN + secret (prints the secret).
 #   4) Creates/updates the custom vnet-peer role at RG scope.
 #   5) Assigns the role to the ISV SPN on the ISV RG.
-#   6) (Optional) Registers the CUSTOMER SPN in the ISV tenant and assigns it the role.
 #
 # You must run this as Owner/Contributor + User Access Administrator in the ISV tenant.
 # IMPORTANT: copy the secret shown at the end; it is only displayed once.
@@ -269,27 +268,6 @@ az role assignment create \
   --assignee "$ISV_APP_ID" \
   --role "$ROLE_NAME" \
   --scope "$ROLE_SCOPE" >/dev/null
-
-###############################################################################
-# OPTIONAL: REGISTER CUSTOMER SPN IN ISV TENANT + ASSIGN ROLE
-###############################################################################
-
-if [[ -n "$CUSTOMER_APP_ID" ]]; then
-  info "Registering customer SPN in ISV tenant (App ID: $CUSTOMER_APP_ID)"
-  if ! az ad sp create --id "$CUSTOMER_APP_ID" >/dev/null 2>&1; then
-    info "If this failed, run admin consent in ISV tenant:"
-    info "https://login.microsoftonline.com/${ISV_TENANT_ID}/adminconsent?client_id=${CUSTOMER_APP_ID}"
-    fail "Customer SPN registration failed."
-  fi
-
-  info "Assigning role to customer SPN on ISV RG scope"
-  az role assignment create \
-    --assignee "$CUSTOMER_APP_ID" \
-    --role "$ROLE_NAME" \
-    --scope "$ROLE_SCOPE" >/dev/null
-else
-  info "CUSTOMER_APP_ID not set; skip customer SPN registration/role assignment."
-fi
 
 ###############################################################################
 # OUTPUTS

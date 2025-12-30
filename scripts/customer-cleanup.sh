@@ -1,8 +1,8 @@
 #!/bin/bash
 #
-# Customer cleanup script for cross-tenant VNet peering resources (SPN-first flow).
+# Customer cleanup script for cross-tenant VNet peering resources (ISV SPN flow).
 # This script can delete:
-#   - Customer SPN (app registration + secret)
+#   - ISV SPN role assignment in the customer tenant
 #   - Custom role and role assignments
 #   - Customer RG/VNet (optional)
 #
@@ -28,7 +28,6 @@ source "$ENV_FILE"
 # What to delete (true/false)
 DELETE_ROLE_ASSIGNMENTS="true"
 DELETE_ROLE_DEFINITION="true"
-DELETE_CUSTOMER_APP="true"
 DELETE_UDR="true"
 DELETE_VNET="true"
 DELETE_RESOURCE_GROUP="true"
@@ -105,14 +104,6 @@ done
 
 if [[ "$DELETE_ROLE_ASSIGNMENTS" == "true" ]]; then
   for scope in "${ROLE_SCOPES[@]}"; do
-    if [[ -n "$CUSTOMER_APP_ID" ]]; then
-      info "Removing role assignment for customer SPN on $scope"
-      az role assignment delete \
-        --assignee "$CUSTOMER_APP_ID" \
-        --role "$ROLE_NAME" \
-        --scope "$scope" >/dev/null 2>&1 || true
-    fi
-
     if [[ -n "$ISV_APP_ID" ]]; then
       info "Removing role assignment for ISV SPN on $scope"
       az role assignment delete \
@@ -130,15 +121,6 @@ fi
 if [[ "$DELETE_ROLE_DEFINITION" == "true" ]]; then
   info "Deleting custom role definition: $ROLE_NAME"
   az role definition delete --name "$ROLE_NAME" >/dev/null 2>&1 || true
-fi
-
-###############################################################################
-# APP REGISTRATION / SPN
-###############################################################################
-
-if [[ "$DELETE_CUSTOMER_APP" == "true" && -n "$CUSTOMER_APP_ID" ]]; then
-  info "Deleting customer app registration: $CUSTOMER_APP_ID"
-  az ad app delete --id "$CUSTOMER_APP_ID" >/dev/null 2>&1 || true
 fi
 
 ###############################################################################

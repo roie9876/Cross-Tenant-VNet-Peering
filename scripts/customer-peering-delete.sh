@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Customer peering delete script (SPN login).
+# Customer peering delete script (ISV SPN login).
 # Deletes peerings created by customer-peering.sh using the same prefix and VNet list.
 
 set -euo pipefail
@@ -32,6 +32,23 @@ fail() {
 
 info() {
   echo "[INFO] $1"
+}
+
+read_env_value() {
+  local file="$1"
+  local key="$2"
+  if [[ ! -f "$file" ]]; then
+    return 0
+  fi
+  awk -F= -v key="$key" '
+    $1 == key {
+      val=$2
+      sub(/^"/, "", val)
+      sub(/"$/, "", val)
+      print val
+      exit
+    }
+  ' "$file"
 }
 
 get_customer_vnet_names() {
@@ -85,10 +102,22 @@ fi
 
 command -v az >/dev/null 2>&1 || fail "Azure CLI (az) is required."
 
-info "Logging in with customer SPN"
+ISV_ENV_FILE="${SCRIPT_DIR}/isv.env.sh"
+if [[ -z "${ISV_APP_ID:-}" ]]; then
+  ISV_APP_ID="$(read_env_value "$ISV_ENV_FILE" "ISV_APP_ID")"
+fi
+if [[ -z "${ISV_APP_SECRET:-}" ]]; then
+  ISV_APP_SECRET="$(read_env_value "$ISV_ENV_FILE" "ISV_APP_SECRET")"
+fi
+
+if [[ -z "${ISV_APP_ID:-}" || -z "${ISV_APP_SECRET:-}" ]]; then
+  fail "Missing ISV_APP_ID or ISV_APP_SECRET (set in scripts/customer.env.sh or scripts/isv.env.sh)"
+fi
+
+info "Logging in with ISV SPN"
 az login --service-principal \
-  --username "$CUSTOMER_APP_ID" \
-  --password "$CUSTOMER_APP_SECRET" \
+  --username "$ISV_APP_ID" \
+  --password "$ISV_APP_SECRET" \
   --tenant "$CUSTOMER_TENANT_ID" >/dev/null
 
 az account set --subscription "$CUSTOMER_SUBSCRIPTION_ID"
