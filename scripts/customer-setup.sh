@@ -4,10 +4,10 @@
 # This script:
 #   1) Logs into the customer tenant/subscription.
 #   2) Optionally creates a new RG + VNet.
-#   3) Creates a multi-tenant App Registration + SPN + secret (prints the secret).
+#   3) (Optional) Creates a customer App/SPN + secret (prints the secret).
 #   4) Creates/updates the custom vnet-peer role at RG scope.
-#   5) Assigns the role to the CUSTOMER SPN on the target RG scopes.
-#   6) (Optional) Registers the ISV SPN in the customer tenant and assigns it the role.
+#   5) Assigns the role to the chosen SPN on the target RG scopes.
+#   6) Registers the ISV SPN in the customer tenant and assigns it the role.
 #
 # You must run this as Owner/Contributor + User Access Administrator in the customer tenant.
 # IMPORTANT: copy the secret shown at the end; it is only displayed once.
@@ -52,7 +52,12 @@ require_value() {
 
 require_value "CUSTOMER_TENANT_ID" "$CUSTOMER_TENANT_ID"
 require_value "CUSTOMER_SUBSCRIPTION_ID" "$CUSTOMER_SUBSCRIPTION_ID"
-require_value "CUSTOMER_APP_DISPLAY_NAME" "$CUSTOMER_APP_DISPLAY_NAME"
+CUSTOMER_CREATE_SPN="${CUSTOMER_CREATE_SPN:-true}"
+if [[ "$CUSTOMER_CREATE_SPN" == "true" ]]; then
+  require_value "CUSTOMER_APP_DISPLAY_NAME" "$CUSTOMER_APP_DISPLAY_NAME"
+else
+  require_value "ISV_APP_ID" "$ISV_APP_ID"
+fi
 if [[ "$CREATE_NEW_RG_VNET" == "true" ]]; then
   require_value "CUSTOMER_LOCATION" "$CUSTOMER_LOCATION"
 fi
@@ -154,27 +159,32 @@ for idx in "${VNET_INDICES[@]}"; do
 done
 
 ###############################################################################
-# CREATE MULTI-TENANT APP REGISTRATION + SPN + SECRET
+# OPTIONAL: CREATE CUSTOMER APP REGISTRATION + SPN + SECRET
 ###############################################################################
 
-info "Creating multi-tenant App Registration: $CUSTOMER_APP_DISPLAY_NAME"
-CUSTOMER_APP_ID=$(az ad app create \
-  --display-name "$CUSTOMER_APP_DISPLAY_NAME" \
-  --sign-in-audience AzureADMultipleOrgs \
-  --query appId -o tsv)
+if [[ "$CUSTOMER_CREATE_SPN" == "true" ]]; then
+  info "Creating multi-tenant App Registration: $CUSTOMER_APP_DISPLAY_NAME"
+  CUSTOMER_APP_ID=$(az ad app create \
+    --display-name "$CUSTOMER_APP_DISPLAY_NAME" \
+    --sign-in-audience AzureADMultipleOrgs \
+    --query appId -o tsv)
 
-info "Creating SPN for App ID: $CUSTOMER_APP_ID"
-az ad sp create --id "$CUSTOMER_APP_ID" >/dev/null
+  info "Creating SPN for App ID: $CUSTOMER_APP_ID"
+  if ! az ad sp show --id "$CUSTOMER_APP_ID" >/dev/null 2>&1; then
+    az ad sp create --id "$CUSTOMER_APP_ID" >/dev/null
+  else
+    info "SPN already exists for App ID: $CUSTOMER_APP_ID"
+  fi
 
-info "Creating client secret for App ID: $CUSTOMER_APP_ID"
-CUSTOMER_APP_SECRET=$(az ad app credential reset \
-  --id "$CUSTOMER_APP_ID" \
-  --append \
-  --display-name "customer-spn-secret-$(date +%Y%m%d)" \
-  --query password -o tsv)
+  info "Creating client secret for App ID: $CUSTOMER_APP_ID"
+  CUSTOMER_APP_SECRET=$(az ad app credential reset \
+    --id "$CUSTOMER_APP_ID" \
+    --append \
+    --display-name "customer-spn-secret-$(date +%Y%m%d)" \
+    --query password -o tsv)
 
-info "Updating scripts/customer.env.sh with CUSTOMER_APP_ID and CUSTOMER_APP_SECRET"
-ENV_FILE_PATH="$ENV_FILE" CUSTOMER_APP_ID="$CUSTOMER_APP_ID" CUSTOMER_APP_SECRET="$CUSTOMER_APP_SECRET" python - <<'PY'
+  info "Updating scripts/customer.env.sh with CUSTOMER_APP_ID and CUSTOMER_APP_SECRET"
+  ENV_FILE_PATH="$ENV_FILE" CUSTOMER_APP_ID="$CUSTOMER_APP_ID" CUSTOMER_APP_SECRET="$CUSTOMER_APP_SECRET" python - <<'PY'
 from pathlib import Path
 import os
 
@@ -200,6 +210,38 @@ env = set_var("CUSTOMER_APP_ID", os.environ["CUSTOMER_APP_ID"], env)
 env = set_var("CUSTOMER_APP_SECRET", os.environ["CUSTOMER_APP_SECRET"], env)
 env_path.write_text(env)
 PY
+
+  if [[ -f "${SCRIPT_DIR}/isv.env.sh" ]]; then
+    info "Updating scripts/isv.env.sh with CUSTOMER_APP_ID (demo convenience)"
+    ENV_FILE_PATH="${SCRIPT_DIR}/isv.env.sh" CUSTOMER_APP_ID="$CUSTOMER_APP_ID" python - <<'PY'
+from pathlib import Path
+import os
+
+env_path = Path(os.environ["ENV_FILE_PATH"])
+text = env_path.read_text()
+
+def set_var(name, value, content):
+    lines = content.splitlines()
+    out = []
+    found = False
+    for line in lines:
+        if line.startswith(f"{name}="):
+            out.append(f'{name}="{value}"')
+            found = True
+        else:
+            out.append(line)
+    if not found:
+        out.append(f'{name}="{value}"')
+    return "\n".join(out) + "\n"
+
+env = text
+env = set_var("CUSTOMER_APP_ID", os.environ["CUSTOMER_APP_ID"], env)
+env_path.write_text(env)
+PY
+  fi
+else
+  info "CUSTOMER_CREATE_SPN=false; skipping customer SPN creation."
+fi
 
 ###############################################################################
 # CREATE/UPDATE CUSTOM ROLE AT RG SCOPE
@@ -259,40 +301,34 @@ EOF
 else
   cat > "$ROLE_FILE" <<EOF
 {
-  "name": "${ROLE_ID}",
-  "properties": {
-    "roleName": "${ROLE_NAME}",
-    "description": "Allow VNet peering, sync and UDR changes on the scoped VNets.",
-    "assignableScopes": [
-      "$(printf '%s' "${ROLE_SCOPES[0]}")"
-    ],
-    "permissions": [
-      {
-        "actions": [
-          "Microsoft.Network/virtualNetworks/read",
-          "Microsoft.Network/virtualNetworks/write",
-          "Microsoft.Network/virtualNetworks/subnets/read",
-          "Microsoft.Network/virtualNetworks/subnets/write",
-          "Microsoft.Network/virtualNetworks/virtualNetworkPeerings/read",
-          "Microsoft.Network/virtualNetworks/virtualNetworkPeerings/write",
-          "Microsoft.Network/virtualNetworks/virtualNetworkPeerings/delete",
-          "Microsoft.Network/virtualNetworks/peer/action",
-          "Microsoft.Network/routeTables/read",
-          "Microsoft.Network/routeTables/write",
-          "Microsoft.Network/routeTables/delete",
-          "Microsoft.Network/routeTables/routes/read",
-          "Microsoft.Network/routeTables/routes/write",
-          "Microsoft.Network/routeTables/routes/delete",
-          "Microsoft.Network/routeTables/join/action",
-          "Microsoft.Network/networkSecurityGroups/read",
-          "Microsoft.Network/networkSecurityGroups/join/action"
-        ],
-        "notActions": [],
-        "dataActions": [],
-        "notDataActions": []
-      }
-    ]
-  }
+  "Name": "${ROLE_NAME}",
+  "IsCustom": true,
+  "Description": "Allow VNet peering, sync and UDR changes on the scoped VNets.",
+  "Actions": [
+    "Microsoft.Network/virtualNetworks/read",
+    "Microsoft.Network/virtualNetworks/write",
+    "Microsoft.Network/virtualNetworks/subnets/read",
+    "Microsoft.Network/virtualNetworks/subnets/write",
+    "Microsoft.Network/virtualNetworks/virtualNetworkPeerings/read",
+    "Microsoft.Network/virtualNetworks/virtualNetworkPeerings/write",
+    "Microsoft.Network/virtualNetworks/virtualNetworkPeerings/delete",
+    "Microsoft.Network/virtualNetworks/peer/action",
+    "Microsoft.Network/routeTables/read",
+    "Microsoft.Network/routeTables/write",
+    "Microsoft.Network/routeTables/delete",
+    "Microsoft.Network/routeTables/routes/read",
+    "Microsoft.Network/routeTables/routes/write",
+    "Microsoft.Network/routeTables/routes/delete",
+    "Microsoft.Network/routeTables/join/action",
+    "Microsoft.Network/networkSecurityGroups/read",
+    "Microsoft.Network/networkSecurityGroups/join/action"
+  ],
+  "NotActions": [],
+  "DataActions": [],
+  "NotDataActions": [],
+  "AssignableScopes": [
+    "$(printf '%s' "${ROLE_SCOPES[0]}")"
+  ]
 }
 EOF
   info "Updating custom role: $ROLE_NAME"
@@ -304,13 +340,15 @@ rm -f "$ROLE_FILE"
 # ASSIGN ROLE TO CUSTOMER SPN (ALL RG SCOPES)
 ###############################################################################
 
-for scope in "${ROLE_SCOPES[@]}"; do
-  info "Assigning role to customer SPN on scope: $scope"
-  az role assignment create \
-    --assignee "$CUSTOMER_APP_ID" \
-    --role "$ROLE_NAME" \
-    --scope "$scope" >/dev/null
-done
+if [[ "$CUSTOMER_CREATE_SPN" == "true" ]]; then
+  for scope in "${ROLE_SCOPES[@]}"; do
+    info "Assigning role to customer SPN on scope: $scope"
+    az role assignment create \
+      --assignee "$CUSTOMER_APP_ID" \
+      --role "$ROLE_NAME" \
+      --scope "$scope" >/dev/null
+  done
+fi
 
 ###############################################################################
 # OPTIONAL: REGISTER ISV SPN IN CUSTOMER TENANT + ASSIGN ROLE
@@ -318,10 +356,12 @@ done
 
 if [[ -n "$ISV_APP_ID" ]]; then
   info "Registering ISV SPN in customer tenant (App ID: $ISV_APP_ID)"
-  if ! az ad sp create --id "$ISV_APP_ID" >/dev/null 2>&1; then
-    info "If this failed, run admin consent in customer tenant:"
-    info "https://login.microsoftonline.com/${CUSTOMER_TENANT_ID}/adminconsent?client_id=${ISV_APP_ID}"
-    fail "ISV SPN registration failed."
+  if ! az ad sp show --id "$ISV_APP_ID" >/dev/null 2>&1; then
+    if ! az ad sp create --id "$ISV_APP_ID" >/dev/null 2>&1; then
+      info "If this failed, run admin consent in customer tenant:"
+      info "https://login.microsoftonline.com/${CUSTOMER_TENANT_ID}/adminconsent?client_id=${ISV_APP_ID}"
+      fail "ISV SPN registration failed."
+    fi
   fi
 
   for scope in "${ROLE_SCOPES[@]}"; do
@@ -347,12 +387,17 @@ CUSTOMER_SUBSCRIPTION_ID=${CUSTOMER_SUBSCRIPTION_ID}
 CUSTOMER_RESOURCE_GROUP=${CUSTOMER_RESOURCE_GROUP}
 CUSTOMER_VNET_NAMES=$(for idx in "${VNET_INDICES[@]}"; do printf "%s " "$(get_var "CUSTOMER_VNET_NAME_${idx}")"; done)
 CUSTOMER_VNET_IDS=$(printf "%s " "${CUSTOMER_VNET_IDS[@]}")
-CUSTOMER_APP_ID=${CUSTOMER_APP_ID}
-CUSTOMER_APP_SECRET=${CUSTOMER_APP_SECRET}
+CUSTOMER_APP_ID=${CUSTOMER_APP_ID:-}
+CUSTOMER_APP_SECRET=${CUSTOMER_APP_SECRET:-}
 CUSTOMER_VNETS_EXAMPLE="$(for idx in "${VNET_INDICES[@]}"; do printf "%s " "$(get_var "CUSTOMER_VNET_NAME_${idx}")"; done)"
 
 Next steps:
-- Share CUSTOMER_APP_ID with the ISV admin.
-- Store CUSTOMER_APP_SECRET securely; it is required for the peering script.
-- Paste CUSTOMER_APP_ID and CUSTOMER_APP_SECRET into scripts/customer.env.sh
+$(if [[ "$CUSTOMER_CREATE_SPN" == "true" ]]; then
+  echo "- Share CUSTOMER_APP_ID with the ISV admin."
+  echo "- Store CUSTOMER_APP_SECRET securely; it is required for the customer peering script."
+  echo "- Paste CUSTOMER_APP_ID and CUSTOMER_APP_SECRET into scripts/customer.env.sh"
+else
+  echo "- Confirm ISV_APP_ID is set in scripts/customer.env.sh."
+  echo "- Customer SPN was not created (CUSTOMER_CREATE_SPN=false)."
+fi)
 EOF

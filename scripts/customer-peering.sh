@@ -54,8 +54,6 @@ require_value() {
 
 require_value "CUSTOMER_TENANT_ID" "$CUSTOMER_TENANT_ID"
 require_value "CUSTOMER_SUBSCRIPTION_ID" "$CUSTOMER_SUBSCRIPTION_ID"
-require_value "CUSTOMER_APP_ID" "$CUSTOMER_APP_ID"
-require_value "CUSTOMER_APP_SECRET" "$CUSTOMER_APP_SECRET"
 require_value "CUSTOMER_RESOURCE_GROUP" "$CUSTOMER_RESOURCE_GROUP"
 require_value "CUSTOMER_LOCATION" "$CUSTOMER_LOCATION"
 require_value "ISV_TENANT_ID" "$ISV_TENANT_ID"
@@ -111,6 +109,50 @@ parse_vnet_entry() {
   echo "${sub_id}|${rg}|${vnet}"
 }
 
+read_env_value() {
+  local file="$1"
+  local key="$2"
+  if [[ ! -f "$file" ]]; then
+    return 0
+  fi
+  awk -F= -v key="$key" '
+    $1 == key {
+      val=$2
+      sub(/^"/, "", val)
+      sub(/"$/, "", val)
+      print val
+      exit
+    }
+  ' "$file"
+}
+
+ISV_ENV_FILE="${SCRIPT_DIR}/isv.env.sh"
+if [[ -z "${ISV_APP_ID:-}" ]]; then
+  ISV_APP_ID="$(read_env_value "$ISV_ENV_FILE" "ISV_APP_ID")"
+fi
+if [[ -z "${ISV_APP_SECRET:-}" ]]; then
+  ISV_APP_SECRET="$(read_env_value "$ISV_ENV_FILE" "ISV_APP_SECRET")"
+fi
+
+LOGIN_APP_ID="${CUSTOMER_APP_ID:-}"
+LOGIN_APP_SECRET="${CUSTOMER_APP_SECRET:-}"
+LOGIN_LABEL="customer SPN"
+MISSING_SP_URL="https://login.microsoftonline.com/${ISV_TENANT_ID}/adminconsent?client_id=${CUSTOMER_APP_ID:-}"
+MISSING_SP_MSG="Customer SPN likely not registered in ISV tenant."
+
+if [[ -z "$LOGIN_APP_ID" || -z "$LOGIN_APP_SECRET" ]]; then
+  if [[ -n "${ISV_APP_ID:-}" && -n "${ISV_APP_SECRET:-}" ]]; then
+    LOGIN_APP_ID="$ISV_APP_ID"
+    LOGIN_APP_SECRET="$ISV_APP_SECRET"
+    LOGIN_LABEL="ISV SPN (registered in customer tenant)"
+    MISSING_SP_URL="https://login.microsoftonline.com/${CUSTOMER_TENANT_ID}/adminconsent?client_id=${ISV_APP_ID}"
+    MISSING_SP_MSG="ISV SPN likely not registered in customer tenant."
+  fi
+fi
+
+require_value "LOGIN_APP_ID" "$LOGIN_APP_ID"
+require_value "LOGIN_APP_SECRET" "$LOGIN_APP_SECRET"
+
 
 ###############################################################################
 # LOGIN AND CONTEXT
@@ -118,10 +160,10 @@ parse_vnet_entry() {
 
 command -v az >/dev/null 2>&1 || fail "Azure CLI (az) is required."
 
-info "Logging in with customer SPN"
+info "Logging in with ${LOGIN_LABEL}"
 az login --service-principal \
-  --username "$CUSTOMER_APP_ID" \
-  --password "$CUSTOMER_APP_SECRET" \
+  --username "$LOGIN_APP_ID" \
+  --password "$LOGIN_APP_SECRET" \
   --tenant "$CUSTOMER_TENANT_ID" >/dev/null
 
 az account set --subscription "$CUSTOMER_SUBSCRIPTION_ID"
@@ -158,10 +200,10 @@ for customer_vnet in "${CUSTOMER_VNET_NAMES[@]}"; do
       --use-remote-gateways "$USE_REMOTE_GATEWAYS" 2>&1); then
       echo "$output" >&2
       if echo "$output" | grep -E -q "missing service principal|AADSTS7000229"; then
-        info "Customer SPN likely not registered in ISV tenant."
-        info "Ask ISV admin to run scripts/isv-register-customer-spn.sh"
+        info "$MISSING_SP_MSG"
+        info "Ask the target tenant admin to run the appropriate register script."
         info "Or use admin consent URL:"
-        info "https://login.microsoftonline.com/${ISV_TENANT_ID}/adminconsent?client_id=${CUSTOMER_APP_ID}"
+        info "$MISSING_SP_URL"
       fi
       exit 1
     fi

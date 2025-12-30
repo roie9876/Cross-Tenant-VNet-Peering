@@ -9,20 +9,25 @@ This repository automates cross-tenant VNet peering using Azure CLI and least-pr
 - Supports both a user-based flow and an SPN-first flow.
 - The user-based script validates address space overlap and peering status.
 
-## High-Level Flow (SPN-First)
+## High-Level Flow (SPN Automation)
 
 **Actors**
 - ISV Admin: Owner/Contributor + User Access Administrator + App Admin in ISV tenant
 - Customer Admin: Owner/Contributor + User Access Administrator + App Admin in customer tenant
-- ISV SPN: service principal created by ISV Admin
-- Customer SPN: service principal created by Customer Admin
+- ISV SPN: service principal created by ISV Admin (multi-tenant)
+- Customer SPN (optional): service principal created by Customer Admin
 
-**Steps**
+**Option A: ISV-owned SPN (no customer secret)**
+1) ISV Admin runs `scripts/isv-setup.sh` to create RG/VNet (optional), custom role, ISV SPN + secret.
+2) Customer Admin runs `scripts/customer-setup.sh` with `CUSTOMER_CREATE_SPN="false"` to create RG/VNet (optional), custom role, and register the ISV SPN in the customer tenant.
+3) ISV runs `scripts/isv-peering.sh` and `scripts/customer-peering.sh` using the ISV SPN.
+
+**Option B: Dual-SPN**
 1) ISV Admin runs `scripts/isv-setup.sh` to create RG/VNet (optional), custom role, ISV SPN + secret.
 2) Customer Admin runs `scripts/customer-setup.sh` to create RG/VNet (optional), custom role, Customer SPN + secret.
-3) Each admin re-runs their setup script with the other side’s App ID to register the external SPN and assign roles.
-4) ISV runs `scripts/isv-peering.sh` using the ISV SPN to create peerings to customer VNets.
-5) Customer runs `scripts/customer-peering.sh` using the Customer SPN to create peerings to ISV VNets.
+3) Each admin runs the register scripts to register the external SPN and assign roles.
+4) ISV runs `scripts/isv-peering.sh` using the ISV SPN.
+5) Customer runs `scripts/customer-peering.sh` using the Customer SPN.
 
 ## Shared Configuration (No Re-typing)
 
@@ -32,6 +37,7 @@ All scripts load values from:
 
 Fill those files once and reuse across all steps.
 These files are gitignored to keep secrets out of source control.
+If both env files live in the same repo, the setup scripts auto-write the App IDs to the other file so you can avoid copy/paste.
 
 Example (ISV side):
 ```bash
@@ -47,8 +53,16 @@ CUSTOMER_VNET_NAME_2="vnet-customer-spoke-2"
 
 ## Deployment Options (CLI Only)
 
-### Option 1: SPN-First Automation (Recommended for CI/CD)
-Use the SPN-first scripts if you want automation with service principals:
+### Option 1: ISV-Owned SPN Automation (No Customer Secret)
+Use one ISV multi-tenant SPN to create both sides of the peering. The customer only grants admin consent and assigns the role.
+- `scripts/isv-setup.sh` (ISV app/SPN + role + optional RG/VNet)
+- `scripts/customer-setup.sh` (customer RG/VNet + role + registers ISV SPN; set `CUSTOMER_CREATE_SPN="false"`)
+- `scripts/isv-peering.sh` (ISV creates peering to customer VNets)
+- `scripts/customer-peering.sh` (ISV creates customer-side peering using the ISV SPN)
+- `scripts/isv-cleanup.sh` and `scripts/customer-cleanup.sh` (cleanup)
+
+### Option 2: Dual-SPN Automation
+Use the SPN-first scripts if you want each tenant to run with its own SPN:
 - `scripts/isv-setup.sh` (ISV app/SPN + role + optional RG/VNet)
 - `scripts/customer-setup.sh` (Customer app/SPN + role + optional RG/VNet, supports multiple RG scopes)
 - `scripts/isv-register-customer-spn.sh` (Register customer SPN in ISV tenant, assign role)
@@ -61,11 +75,30 @@ Use the SPN-first scripts if you want automation with service principals:
 - `scripts/isv-peering-delete.sh` (Delete ISV-side peerings)
 - `scripts/customer-peering-delete.sh` (Delete customer-side peerings)
 
-### Option 2: User-Based Script (Interactive)
+### Option 3: User-Based Script (Interactive)
 Use `scripts/create-cross-tenant-vnet-peering.sh` if you want a single script that logs into both tenants with a user account and creates peerings.
 The user must have `vnet-peer` role (or equivalent) in each tenant’s RG; Owner/Contributor is not required unless creating roles or resources outside peering.
 
-## Quick Start (SPN-First)
+## Quick Start (SPN Automation)
+
+### Option A: ISV-Owned SPN (No Customer Secret)
+
+1) ISV admin runs:
+- Fill `scripts/isv.env.sh` (leave `ISV_APP_ID` and `ISV_APP_SECRET` empty)
+- Run `scripts/isv-setup.sh` to create the ISV app/SPN
+- The script auto-updates `scripts/isv.env.sh` and, if present, `scripts/customer.env.sh` with `ISV_APP_ID`
+
+2) Customer admin runs:
+- Fill `scripts/customer.env.sh` and set `CUSTOMER_CREATE_SPN="false"`
+  - Add one or more `CUSTOMER_VNET_NAME_1`, `CUSTOMER_VNET_NAME_2`, etc. with address space/subnet values
+  - Ensure `ISV_APP_ID` is present (auto-set if both env files are in the same repo)
+- Run `scripts/customer-setup.sh` to create RG/VNets, the role, and register the ISV SPN
+
+3) ISV admin runs:
+- `scripts/isv-peering.sh`
+- `scripts/customer-peering.sh` (uses the ISV SPN if `CUSTOMER_APP_ID`/`CUSTOMER_APP_SECRET` are empty)
+
+### Option B: Dual-SPN
 
 1) ISV admin runs:
 - Fill `scripts/isv.env.sh` (leave `ISV_APP_ID` and `ISV_APP_SECRET` empty)

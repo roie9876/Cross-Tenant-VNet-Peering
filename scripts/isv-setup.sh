@@ -107,7 +107,11 @@ ISV_APP_ID=$(az ad app create \
   --query appId -o tsv)
 
 info "Creating SPN for App ID: $ISV_APP_ID"
-az ad sp create --id "$ISV_APP_ID" >/dev/null
+if ! az ad sp show --id "$ISV_APP_ID" >/dev/null 2>&1; then
+  az ad sp create --id "$ISV_APP_ID" >/dev/null
+else
+  info "SPN already exists for App ID: $ISV_APP_ID"
+fi
 
 info "Creating client secret for App ID: $ISV_APP_ID"
 ISV_APP_SECRET=$(az ad app credential reset \
@@ -143,6 +147,35 @@ env = set_var("ISV_APP_ID", os.environ["ISV_APP_ID"], env)
 env = set_var("ISV_APP_SECRET", os.environ["ISV_APP_SECRET"], env)
 env_path.write_text(env)
 PY
+
+if [[ -f "${SCRIPT_DIR}/customer.env.sh" ]]; then
+  info "Updating scripts/customer.env.sh with ISV_APP_ID (demo convenience)"
+  ENV_FILE_PATH="${SCRIPT_DIR}/customer.env.sh" ISV_APP_ID="$ISV_APP_ID" python - <<'PY'
+from pathlib import Path
+import os
+
+env_path = Path(os.environ["ENV_FILE_PATH"])
+text = env_path.read_text()
+
+def set_var(name, value, content):
+    lines = content.splitlines()
+    out = []
+    found = False
+    for line in lines:
+        if line.startswith(f"{name}="):
+            out.append(f'{name}="{value}"')
+            found = True
+        else:
+            out.append(line)
+    if not found:
+        out.append(f'{name}="{value}"')
+    return "\n".join(out) + "\n"
+
+env = text
+env = set_var("ISV_APP_ID", os.environ["ISV_APP_ID"], env)
+env_path.write_text(env)
+PY
+fi
 
 ###############################################################################
 # CREATE/UPDATE CUSTOM ROLE AT RG SCOPE
@@ -192,40 +225,34 @@ EOF
 else
   cat > "$ROLE_FILE" <<EOF
 {
-  "name": "${ROLE_ID}",
-  "properties": {
-    "roleName": "${ROLE_NAME}",
-    "description": "Allow VNet peering, sync and UDR changes on the scoped VNets.",
-    "assignableScopes": [
-      "${ROLE_SCOPE}"
-    ],
-    "permissions": [
-      {
-        "actions": [
-          "Microsoft.Network/virtualNetworks/read",
-          "Microsoft.Network/virtualNetworks/write",
-          "Microsoft.Network/virtualNetworks/subnets/read",
-          "Microsoft.Network/virtualNetworks/subnets/write",
-          "Microsoft.Network/virtualNetworks/virtualNetworkPeerings/read",
-          "Microsoft.Network/virtualNetworks/virtualNetworkPeerings/write",
-          "Microsoft.Network/virtualNetworks/virtualNetworkPeerings/delete",
-          "Microsoft.Network/virtualNetworks/peer/action",
-          "Microsoft.Network/routeTables/read",
-          "Microsoft.Network/routeTables/write",
-          "Microsoft.Network/routeTables/delete",
-          "Microsoft.Network/routeTables/routes/read",
-          "Microsoft.Network/routeTables/routes/write",
-          "Microsoft.Network/routeTables/routes/delete",
-          "Microsoft.Network/routeTables/join/action",
-          "Microsoft.Network/networkSecurityGroups/read",
-          "Microsoft.Network/networkSecurityGroups/join/action"
-        ],
-        "notActions": [],
-        "dataActions": [],
-        "notDataActions": []
-      }
-    ]
-  }
+  "Name": "${ROLE_NAME}",
+  "IsCustom": true,
+  "Description": "Allow VNet peering, sync and UDR changes on the scoped VNets.",
+  "Actions": [
+    "Microsoft.Network/virtualNetworks/read",
+    "Microsoft.Network/virtualNetworks/write",
+    "Microsoft.Network/virtualNetworks/subnets/read",
+    "Microsoft.Network/virtualNetworks/subnets/write",
+    "Microsoft.Network/virtualNetworks/virtualNetworkPeerings/read",
+    "Microsoft.Network/virtualNetworks/virtualNetworkPeerings/write",
+    "Microsoft.Network/virtualNetworks/virtualNetworkPeerings/delete",
+    "Microsoft.Network/virtualNetworks/peer/action",
+    "Microsoft.Network/routeTables/read",
+    "Microsoft.Network/routeTables/write",
+    "Microsoft.Network/routeTables/delete",
+    "Microsoft.Network/routeTables/routes/read",
+    "Microsoft.Network/routeTables/routes/write",
+    "Microsoft.Network/routeTables/routes/delete",
+    "Microsoft.Network/routeTables/join/action",
+    "Microsoft.Network/networkSecurityGroups/read",
+    "Microsoft.Network/networkSecurityGroups/join/action"
+  ],
+  "NotActions": [],
+  "DataActions": [],
+  "NotDataActions": [],
+  "AssignableScopes": [
+    "${ROLE_SCOPE}"
+  ]
 }
 EOF
   info "Updating custom role: $ROLE_NAME"
