@@ -11,22 +11,12 @@ This repository automates cross-tenant VNet peering using Azure CLI and least-pr
 
 ## Quick Visual Flow (SPN Automation)
 
-```
-ISV Tenant                            Customer Tenant
------------                           ----------------
-1) isv-setup.sh
-   - creates ISV SPN
-   - assigns vnet-peer on ISV RG
-   - writes ISV_APP_ID/SECRET
-                  |
-                  | 2) customer-setup.sh
-                  |    - registers ISV SPN in customer tenant
-                  |    - assigns vnet-peer on customer RG
-                  v
-3) isv-peering.sh  --> creates ISV-side peering
-4) customer-peering.sh --> creates customer-side peering
-
-Result: two peerings, status = Connected
+```mermaid
+flowchart TB
+  A["ISV Admin<br/>1) Run scripts/isv-setup.sh<br/>- Creates ISV SPN<br/>- Assigns vnet-peer on ISV RG<br/>- Writes ISV_APP_ID/SECRET"] --> B["Customer Admin<br/>2) Run scripts/customer-setup.sh<br/>- Creates RG/VNets (optional)<br/>- Registers ISV SPN in customer tenant<br/>- Assigns vnet-peer on customer RG"]
+  B --> C["ISV Admin<br/>3) Run scripts/isv-peering.sh<br/>- Creates ISV-side peering"]
+  C --> D["ISV Admin<br/>4) Run scripts/customer-peering.sh<br/>- Creates customer-side peering"]
+  D --> E["Result<br/>PeeringState=Connected<br/>SyncLevel=FullyInSync"]
 ```
 
 **Actors**
@@ -48,6 +38,10 @@ All scripts load values from:
 Fill those files once and reuse across all steps.
 These files are gitignored to keep secrets out of source control.
 If both env files live in the same repo, the setup scripts auto-write the App IDs to the other file so you can avoid copy/paste.
+
+Example files you can copy:
+- `scripts/isv.env.example`
+- `scripts/customer.env.example`
 
 ### Template: `scripts/isv.env.sh`
 ```bash
