@@ -21,13 +21,6 @@ source "$ENV_FILE"
 ###############################################################################
 
 # Values are loaded from scripts/isv.env.sh
-ISV_PEERING_NAME_PREFIX="peer-isv-to-customer"
-
-# Peering options
-ALLOW_VNET_ACCESS="true"
-ALLOW_FORWARDED_TRAFFIC="true"
-ALLOW_GATEWAY_TRANSIT="false"
-USE_REMOTE_GATEWAYS="false"
 
 ###############################################################################
 # HELPERS
@@ -121,3 +114,11 @@ for customer_vnet in "${CUSTOMER_VNET_NAMES[@]}"; do
 done
 
 info "ISV peering creation complete."
+
+info "Attempting to remove temporary Reader role from ISV Subscription..."
+# Note: This command requires the ISV SPN to have 'Microsoft.Authorization/roleAssignments/delete' permission.
+az role assignment delete \
+  --assignee "$ISV_APP_ID" \
+  --role "Reader" \
+  --scope "/subscriptions/${ISV_SUBSCRIPTION_ID}" >/dev/null 2>&1 || \
+  info "[WARN] Could not remove Reader role. The ISV SPN may lack permission. Please remove manually."

@@ -180,7 +180,6 @@ fi
 # CREATE/UPDATE CUSTOM ROLE AT RG SCOPE
 ###############################################################################
 
-ROLE_NAME="vnet-peer-new"
 ROLE_SCOPE="/subscriptions/${ISV_SUBSCRIPTION_ID}/resourceGroups/${ISV_RESOURCE_GROUP}"
 
 ROLE_ID=$(az role definition list --name "$ROLE_NAME" --query "[0].name" -o tsv 2>/dev/null || true)
@@ -268,6 +267,12 @@ az role assignment create \
   --assignee "$ISV_APP_ID" \
   --role "$ROLE_NAME" \
   --scope "$ROLE_SCOPE" >/dev/null
+
+info "Assigning Reader role to ISV SPN on ISV Subscription (for CLI validation)"
+az role assignment create \
+  --assignee "$ISV_APP_ID" \
+  --role "Reader" \
+  --scope "/subscriptions/${ISV_SUBSCRIPTION_ID}" >/dev/null
 
 ###############################################################################
 # OUTPUTS

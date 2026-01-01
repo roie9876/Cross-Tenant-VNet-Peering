@@ -65,7 +65,6 @@ info "Logging into ISV tenant: $ISV_TENANT_ID"
 az login --tenant "$ISV_TENANT_ID" >/dev/null
 az account set --subscription "$ISV_SUBSCRIPTION_ID"
 
-ROLE_NAME="vnet-peer"
 ROLE_SCOPE="/subscriptions/${ISV_SUBSCRIPTION_ID}/resourceGroups/${ISV_RESOURCE_GROUP}"
 
 ###############################################################################
@@ -79,6 +78,12 @@ if [[ "$DELETE_ROLE_ASSIGNMENTS" == "true" ]]; then
       --assignee "$ISV_APP_ID" \
       --role "$ROLE_NAME" \
       --scope "$ROLE_SCOPE" >/dev/null 2>&1 || true
+
+    info "Removing Reader role assignment for ISV SPN on ISV Subscription"
+    az role assignment delete \
+      --assignee "$ISV_APP_ID" \
+      --role "Reader" \
+      --scope "/subscriptions/${ISV_SUBSCRIPTION_ID}" >/dev/null 2>&1 || true
   fi
 
 fi

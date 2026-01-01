@@ -22,14 +22,6 @@ fi
 source "$ENV_FILE"
 
 # Values are loaded from scripts/customer.env.sh
-CUSTOMER_PEERING_NAME_PREFIX="peer-customer-to-isv"
-CUSTOMER_UDR_NAME_PREFIX="udr-to-isv-lb"
-
-# Peering options
-ALLOW_VNET_ACCESS="true"
-ALLOW_FORWARDED_TRAFFIC="true"
-ALLOW_GATEWAY_TRANSIT="false"
-USE_REMOTE_GATEWAYS="false"
 
 ###############################################################################
 # HELPERS
@@ -249,3 +241,13 @@ if [[ "${CUSTOMER_UDR_ENABLE:-false}" == "true" ]]; then
 fi
 
 info "Customer peering creation complete."
+
+info "Attempting to remove temporary Reader role from Customer Subscription..."
+# Note: This command requires the ISV SPN to have 'Microsoft.Authorization/roleAssignments/delete' permission
+# on the subscription, which it typically does NOT have (it only has Reader + Custom RG Role).
+# If this fails, the role must be removed manually or by an admin script.
+az role assignment delete \
+  --assignee "$ISV_APP_ID" \
+  --role "Reader" \
+  --scope "/subscriptions/${CUSTOMER_SUBSCRIPTION_ID}" >/dev/null 2>&1 || \
+  info "[WARN] Could not remove Reader role. The ISV SPN may lack permission. Please remove manually."

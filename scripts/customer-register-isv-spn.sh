@@ -56,8 +56,6 @@ info "Logging into customer tenant: $CUSTOMER_TENANT_ID"
 az login --tenant "$CUSTOMER_TENANT_ID" >/dev/null
 az account set --subscription "$CUSTOMER_SUBSCRIPTION_ID"
 
-ROLE_NAME="vnet-peer"
-
 ROLE_ID=$(az role definition list --name "$ROLE_NAME" --query "[0].name" -o tsv 2>/dev/null || true)
 if [[ -z "$ROLE_ID" ]]; then
   fail "Role ${ROLE_NAME} not found. Run scripts/customer-setup.sh first."
@@ -90,5 +88,9 @@ for scope in "${ROLE_SCOPES[@]}"; do
     --role "$ROLE_NAME" \
     --scope "$scope" >/dev/null 2>&1 || true
 done
-
+info "Assigning Reader role to ISV SPN on Customer Subscription (for CLI validation)"
+az role assignment create \
+  --assignee "$ISV_APP_ID" \
+  --role "Reader" \
+  --scope "/subscriptions/${CUSTOMER_SUBSCRIPTION_ID}" >/dev/null
 info "Customer registration complete."

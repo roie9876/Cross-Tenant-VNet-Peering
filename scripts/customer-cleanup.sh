@@ -85,8 +85,6 @@ info "Logging into customer tenant: $CUSTOMER_TENANT_ID"
 az login --tenant "$CUSTOMER_TENANT_ID" >/dev/null
 az account set --subscription "$CUSTOMER_SUBSCRIPTION_ID"
 
-ROLE_NAME="vnet-peer"
-
 ROLE_SCOPE_LIST="$CUSTOMER_ROLE_SCOPES"
 if [[ -z "$ROLE_SCOPE_LIST" ]]; then
   ROLE_SCOPE_LIST="${CUSTOMER_SUBSCRIPTION_ID}:${CUSTOMER_RESOURCE_GROUP}"
@@ -112,6 +110,14 @@ if [[ "$DELETE_ROLE_ASSIGNMENTS" == "true" ]]; then
         --scope "$scope" >/dev/null 2>&1 || true
     fi
   done
+
+  if [[ -n "$ISV_APP_ID" ]]; then
+    info "Removing Reader role assignment for ISV SPN on Customer Subscription"
+    az role assignment delete \
+      --assignee "$ISV_APP_ID" \
+      --role "Reader" \
+      --scope "/subscriptions/${CUSTOMER_SUBSCRIPTION_ID}" >/dev/null 2>&1 || true
+  fi
 fi
 
 ###############################################################################

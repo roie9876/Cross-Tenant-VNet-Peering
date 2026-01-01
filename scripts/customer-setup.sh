@@ -155,8 +155,6 @@ done
 # CREATE/UPDATE CUSTOM ROLE AT RG SCOPE
 ###############################################################################
 
-ROLE_NAME="vnet-peer-new"
-
 ROLE_SCOPE_LIST="$CUSTOMER_ROLE_SCOPES"
 if [[ -z "$ROLE_SCOPE_LIST" ]]; then
   ROLE_SCOPE_LIST="${CUSTOMER_SUBSCRIPTION_ID}:${CUSTOMER_RESOURCE_GROUP}"
@@ -265,6 +263,12 @@ if [[ -n "$ISV_APP_ID" ]]; then
       --role "$ROLE_NAME" \
       --scope "$scope" >/dev/null
   done
+
+  info "Assigning Reader role to ISV SPN on Customer Subscription (for CLI validation)"
+  az role assignment create \
+    --assignee "$ISV_APP_ID" \
+    --role "Reader" \
+    --scope "/subscriptions/${CUSTOMER_SUBSCRIPTION_ID}" >/dev/null
 else
   info "ISV_APP_ID not set; skip ISV SPN registration/role assignment."
 fi

@@ -19,7 +19,6 @@ source "$ENV_FILE"
 ###############################################################################
 
 # Values are loaded from scripts/isv.env.sh
-ISV_PEERING_NAME_PREFIX="peer-isv-to-customer"
 
 ###############################################################################
 # HELPERS

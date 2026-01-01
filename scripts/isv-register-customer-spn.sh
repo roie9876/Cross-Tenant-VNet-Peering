@@ -36,7 +36,6 @@ info "Logging into ISV tenant: $ISV_TENANT_ID"
 az login --tenant "$ISV_TENANT_ID" >/dev/null
 az account set --subscription "$ISV_SUBSCRIPTION_ID"
 
-ROLE_NAME="vnet-peer"
 ROLE_SCOPE="/subscriptions/${ISV_SUBSCRIPTION_ID}/resourceGroups/${ISV_RESOURCE_GROUP}"
 
 ROLE_ID=$(az role definition list --name "$ROLE_NAME" --query "[0].name" -o tsv 2>/dev/null || true)
