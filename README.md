@@ -13,15 +13,36 @@ This repository automates cross-tenant VNet peering using Azure CLI and least-pr
 
 ```mermaid
 flowchart TD
-    subgraph Customer_Side [Customer Admin]
-    C_Setup[Run customer-setup.sh]
+    %% Styles
+    classDef person fill:#e1f5fe,stroke:#01579b,stroke-width:2px,rx:10,ry:10;
+    classDef script fill:#fff3e0,stroke:#e65100,stroke-width:1px;
+    classDef endNode fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px,rx:50,ry:50;
+
+    subgraph Customer_Zone [Customer Tenant]
+        direction TB
+        C_Admin("👤 Customer Admin"):::person
+        C_Script1["scripts/customer-setup.sh<br/>• Creates RG/VNets<br/>• Registers ISV SPN<br/>• Assigns 'vnet-peer' Role<br/>• Assigns 'Reader' Role"]:::script
     end
 
-    subgraph ISV_Side [ISV Admin]
-    I_Setup[Run isv-setup.sh] --> I_Peer[Run isv-peering.sh]
-    I_Peer --> C_Peer[Run customer-peering.sh]
-    C_Peer --> Done((End))
+    subgraph ISV_Zone [ISV Tenant]
+        direction TB
+        I_Admin("👤 ISV Admin"):::person
+        I_Script1["scripts/isv-setup.sh<br/>• Creates ISV SPN<br/>• Assigns 'vnet-peer' Role<br/>• Generates App ID & Secret"]:::script
+        I_Script2["scripts/isv-peering.sh<br/>• Logins as ISV SPN<br/>• Creates ISV ➔ Customer Link"]:::script
+        I_Script3["scripts/customer-peering.sh<br/>• Logins as ISV SPN<br/>• Creates Customer ➔ ISV Link<br/>• Removes 'Reader' Role"]:::script
     end
+
+    %% Flow
+    C_Admin --> C_Script1
+    I_Admin --> I_Script1
+    
+    I_Script1 --> I_Script2
+    I_Script2 --> I_Script3
+    
+    %% Dependency: Customer setup must happen before the final peering link
+    C_Script1 --> I_Script3
+    
+    I_Script3 --> Done(("End<br/>Peering Connected")):::endNode
 ```
 
 **Actors**
