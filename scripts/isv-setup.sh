@@ -180,7 +180,7 @@ fi
 # CREATE/UPDATE CUSTOM ROLE AT RG SCOPE
 ###############################################################################
 
-ROLE_NAME="vnet-peer"
+ROLE_NAME="vnet-peer-new"
 ROLE_SCOPE="/subscriptions/${ISV_SUBSCRIPTION_ID}/resourceGroups/${ISV_RESOURCE_GROUP}"
 
 ROLE_ID=$(az role definition list --name "$ROLE_NAME" --query "[0].name" -o tsv 2>/dev/null || true)

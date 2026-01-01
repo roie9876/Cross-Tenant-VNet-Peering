@@ -155,7 +155,7 @@ done
 # CREATE/UPDATE CUSTOM ROLE AT RG SCOPE
 ###############################################################################
 
-ROLE_NAME="vnet-peer"
+ROLE_NAME="vnet-peer-new"
 
 ROLE_SCOPE_LIST="$CUSTOMER_ROLE_SCOPES"
 if [[ -z "$ROLE_SCOPE_LIST" ]]; then
@@ -251,7 +251,7 @@ rm -f "$ROLE_FILE"
 if [[ -n "$ISV_APP_ID" ]]; then
   info "Registering ISV SPN in customer tenant (App ID: $ISV_APP_ID)"
   if ! az ad sp show --id "$ISV_APP_ID" >/dev/null 2>&1; then
-    if ! az ad sp create --id "$ISV_APP_ID" >/dev/null 2>&1; then
+    if ! az ad sp create --id "$ISV_APP_ID"; then
       info "If this failed, run admin consent in customer tenant:"
       info "https://login.microsoftonline.com/${CUSTOMER_TENANT_ID}/adminconsent?client_id=${ISV_APP_ID}"
       fail "ISV SPN registration failed."
