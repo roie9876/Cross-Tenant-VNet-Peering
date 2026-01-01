@@ -12,12 +12,16 @@ This repository automates cross-tenant VNet peering using Azure CLI and least-pr
 ## Quick Visual Flow (SPN Automation)
 
 ```mermaid
-flowchart TB
-  A["ISV Admin<br/>1) Run scripts/isv-setup.sh<br/>- Creates ISV SPN<br/>- Assigns vnet-peer on ISV RG<br/>- Assigns Reader on ISV Sub<br/>- Writes ISV_APP_ID/SECRET"] --> B["Customer Admin<br/>2) Run scripts/customer-setup.sh<br/>- Creates RG/VNets (optional)"]
-  B --> C["Customer Admin<br/>3) Run scripts/customer-register-isv-spn.sh<br/>- Registers ISV SPN in customer tenant<br/>- Assigns vnet-peer on customer RG<br/>- Assigns Reader on customer Sub"]
-  C --> D["ISV Admin<br/>4) Run scripts/isv-peering.sh<br/>- Creates ISV-side peering"]
-  D --> E["ISV Admin<br/>5) Run scripts/customer-peering.sh<br/>- Creates customer-side peering"]
-  E --> F["Result<br/>PeeringState=Connected<br/>SyncLevel=FullyInSync"]
+flowchart TD
+    subgraph Customer_Side [Customer Admin]
+    C_Setup[Run customer-setup.sh]
+    end
+
+    subgraph ISV_Side [ISV Admin]
+    I_Setup[Run isv-setup.sh] --> I_Peer[Run isv-peering.sh]
+    I_Peer --> C_Peer[Run customer-peering.sh]
+    C_Peer --> Done((End))
+    end
 ```
 
 **Actors**
@@ -26,10 +30,9 @@ flowchart TB
 - ISV SPN: service principal created by ISV Admin (multi-tenant)
 
 **Steps**
-1) ISV Admin runs `scripts/isv-setup.sh` to create RG/VNet, custom role, ISV SPN + secret, and assign permissions.
-2) Customer Admin runs `scripts/customer-setup.sh` to create RG/VNet (optional).
-3) Customer Admin runs `scripts/customer-register-isv-spn.sh` to register the ISV SPN and grant permissions (including temporary Reader role).
-4) ISV runs `scripts/isv-peering.sh` and `scripts/customer-peering.sh` using the ISV SPN.
+1) ISV Admin runs `scripts/isv-setup.sh` to create RG/VNet, custom role, ISV SPN + secret.
+2) Customer Admin runs `scripts/customer-setup.sh` to create RG/VNet (optional) and register the ISV SPN (if `ISV_APP_ID` is provided).
+3) ISV runs `scripts/isv-peering.sh` and `scripts/customer-peering.sh` using the ISV SPN.
 
 ## Shared Configuration (No Re-typing)
 
