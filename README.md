@@ -263,6 +263,56 @@ Expected:
 - `PeeringState` = `Connected`
 - `SyncLevel` = `FullyInSync`
 
+## Troubleshooting: Cross-Tenant Peering with Single SPN
+
+When running the peering command as a Service Principal, the Azure CLI only loads the context for the tenant you explicitly logged into. When you try to peer with the Customer's VNet, the CLI looks for the Customer Subscription inside the ISV Tenant, fails to find it, and errors out immediately. It does not automatically know it needs to check the Customer Tenant.
+
+### The Solution: Double Login
+
+You must explicitly log in to both tenants in the same session. This forces the Azure CLI to cache the access tokens for both the ISV and the Customer. When you run the peering command, the CLI can then find the remote subscription and authenticate correctly.
+
+Run these commands in order:
+
+1. **Login to ISV Tenant (Primary Context)**
+
+   ```bash
+   az login --service-principal \
+     --username "00000000-0000-0000-0000-000000000000" \
+     --password "YOUR_SECRET_HERE" \
+     --tenant "11111111-1111-1111-1111-111111111111"
+   ```
+
+2. **Login to Customer Tenant (Auxiliary Context)**
+
+   This step is critical. It caches the token for the remote tenant.
+
+   ```bash
+   az login --service-principal \
+     --username "00000000-0000-0000-0000-000000000000" \
+     --password "YOUR_SECRET_HERE" \
+     --tenant "22222222-2222-2222-2222-222222222222" \
+     --allow-no-subscriptions
+   ```
+
+3. **Switch back to ISV Subscription**
+
+   Set the active subscription back to where the peering will be created.
+
+   ```bash
+   az account set --subscription "33333333-3333-3333-3333-333333333333"
+   ```
+
+4. **Run the Peering Command**
+
+   ```bash
+   az network vnet peering create \
+     --resource-group "cp-fwaas-east-us-2" \
+     --vnet-name "vnet01" \
+     --name "Peering-to-customer-vnetA" \
+     --remote-vnet "/subscriptions/44444444-4444-4444-4444-444444444444/resourceGroups/cp-customer-east-us-2/providers/Microsoft.Network/virtualNetworks/cp-customer-vnet" \
+     --allow-vnet-access
+   ```
+
 ## Support
 
 - `docs/PREREQUISITES.md`
